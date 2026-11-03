@@ -13,7 +13,7 @@ export function createServer(options={}) {
    res.setHeader('X-Content-Type-Options','nosniff');res.setHeader('Referrer-Policy','no-referrer');
    res.setHeader('Content-Security-Policy',"default-src 'self'; style-src 'self'; script-src 'self'; connect-src 'self'; frame-ancestors 'none'");
    if(req.method==='GET'&&!url.pathname.startsWith('/api/')) {
-    const files={'/':'index.html','/app.js':'app.js','/style.css':'style.css'};const file=files[url.pathname];if(!file)return json(404,{error:'Не найдено'});
+    const files={'/':'index.html','/app.js':'app.js','/guesser.js':'guesser.js','/style.css':'style.css'};const file=files[url.pathname];if(!file)return json(404,{error:'Не найдено'});
     const data=await readFile(new URL(`./public/${file}`,import.meta.url));res.writeHead(200,{'Content-Type':file.endsWith('.html')?'text/html; charset=utf-8':file.endsWith('.js')?'text/javascript; charset=utf-8':'text/css; charset=utf-8','Cache-Control':'no-cache'});return res.end(data);
    }
    if(req.method==='POST') {

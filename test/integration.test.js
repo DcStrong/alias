@@ -104,7 +104,7 @@ test('Граница таймера, недопустимые запросы и 
  const foreign=await fetch(f.base+`/api/rooms/${code}/action`,{method:'POST',headers:{'Content-Type':'application/json',cookie:a.cookie,origin:'https://example.invalid'},body:JSON.stringify({type:'next',version:a.state.version})});assert.equal(foreign.status,403);
  const stranger=f.client();const response=await stranger.post(`/api/rooms/${code}/action`,{type:'next',version:a.state.version});assert.equal(response.status,400);
  const late=await stranger.post(`/api/rooms/${code}/join`);assert.equal(late.status,400);assert.equal((await fetch(f.base+'/words.js')).status,404);
- const home=await fetch(f.base);assert.equal(home.status,200);assert.match(home.headers.get('content-security-policy'),/frame-ancestors 'none'/);
+ assert.equal((await fetch(f.base+'/guesser.js')).status,200);const home=await fetch(f.base);assert.equal(home.status,200);assert.match(home.headers.get('content-security-policy'),/frame-ancestors 'none'/);
 });
 
 test('Собственный словарь: сотни карточек без повторов в партии',async t=>{
@@ -167,3 +167,19 @@ for(const difficulty of ['basic','hard'])for(const mode of ['pair','ffa','teams'
   assert.equal(a.state.phase,'finished');assert.equal(a.state.turnCount,names.length);assert.equal(a.state.settings.difficulty,difficulty);
  });
 }
+
+test('Завершённая карточка раскрывается, следующая скрыта, нарушение не раскрывается',async t=>{
+ const f=await fixture(t),{a,b}=await prepare(f,{online:true,difficulty:'hard'});await a.action('begin');await b.wait(s=>s.phase==='playing');assert.equal(b.state.lastCompleted,null);
+ const first=a.state.card;await a.action('card',{card:first.id,result:'guess'});await b.wait(s=>s.lastCompleted?.word===first.word);assert.equal(b.state.lastCompleted.result,'guess');assert.equal(b.state.card,null);assert.ok(!JSON.stringify(b.state).includes(a.state.card.word));
+ const second=a.state.card;await a.action('card',{card:second.id,result:'skip'});await b.wait(s=>s.lastCompleted?.word===second.word);assert.equal(b.state.lastCompleted.result,'skip');assert.equal(b.state.scores.pair,1);
+ const third=a.state.card;await b.wait(s=>s.version>=a.state.version);await b.action('card',{card:third.id,result:'guess'},400);await a.action('card',{card:second.id,result:'guess'},400);assert.equal(a.state.lastCompleted.word,second.word);
+ await a.action('card',{card:third.id,result:'violation'});await b.wait(s=>s.version>=a.state.version);assert.equal(b.state.lastCompleted.word,second.word);assert.ok(!JSON.stringify(b.state).includes(third.word));assert.ok(!JSON.stringify(b.state).includes(a.state.card.word));
+});
+
+test('Последнее слово после таймера доступно объясняющему, сохраняется в итогах партии и не засчитывается',async t=>{
+ const f=await fixture(t),{a,b,code}=await prepare(f,{online:true});await a.action('begin');const first=a.state.card;await f.advance(60000);await a.wait(s=>s.phase==='summary');await b.wait(s=>s.phase==='summary');
+ assert.equal(a.state.card,null);assert.equal(a.state.lastCard.word,first.word);assert.equal(a.state.lastCard.result,'unplayed');assert.equal(b.state.lastCard,null);assert.ok(!JSON.stringify(b.state).includes(first.word));
+ await a.action('card',{card:first.id,result:'guess'},400);assert.deepEqual(a.state.scores,{});await a.join(code);assert.equal(a.state.lastCard.word,first.word);await a.action('next');assert.equal(a.state.phase,'handoff');assert.equal(a.state.lastCard,null);assert.equal(a.state.lastCompleted,null);
+ await b.wait(s=>s.phase==='handoff');await b.action('begin');const last=b.state.card;await f.advance(60000);await a.wait(s=>s.phase==='summary');await b.wait(s=>s.phase==='summary');await a.action('next');await b.wait(s=>s.phase==='finished');assert.equal(b.state.lastCard.word,last.word);assert.equal(a.state.lastCard,null);assert.equal(b.state.deadline,null);assert.deepEqual(b.state.scores,{});
+ await a.action('restart');await b.wait(s=>s.phase==='lobby');assert.equal(b.state.lastCard,null);assert.equal(b.state.lastCompleted,null);
+});

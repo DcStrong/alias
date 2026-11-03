@@ -1,1 +1,1 @@
-{"name":"alias-friends","version":"1.0.0","private":true,"type":"module","engines":{"node":">=22"},"scripts":{"start":"node server.js","test":"node --test","check":"node --check server.js && node --check game.js && node --check public/app.js"}}
+{"name":"alias-friends","version":"1.0.0","private":true,"type":"module","engines":{"node":">=22"},"scripts":{"start":"node server.js","test":"node --test","check":"node --check server.js && node --check game.js && node --check public/app.js && node --check public/guesser.js"}}

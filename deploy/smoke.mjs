@@ -2,6 +2,8 @@
 import assert from 'node:assert/strict';
 import {setTimeout as delay} from 'node:timers/promises';
 const base=new URL(process.argv[2]||'https://144.31.97.89').origin;
+const difficulty=process.argv.find(arg=>arg.startsWith('--difficulty='))?.split('=')[1]||'basic';
+const quick=process.argv.includes('--quick');
 const clients=[];
 class Client {
  constructor(){clients.push(this);this.messages=[];}
@@ -25,16 +27,22 @@ class Client {
 }
 try {
  const home=await fetch(base,{signal:AbortSignal.timeout(15000)});assert.equal(home.status,200);assert.match(await home.text(),/Скажи иначе/);
+ assert.equal((await fetch(base+'/guesser.js')).status,200);
  const a=new Client(),b=new Client();await a.create();const code=a.state.code;await a.connect();await b.join(code);await b.connect();await a.wait(s=>s.devices.length===2&&s.devices.every(d=>d.online));
  await a.action('addPlayer',{name:'Проверка A'});await b.wait(s=>s.players.length===1);await b.action('addPlayer',{name:'Проверка B'});await a.wait(s=>s.players.length===2);
- await a.action('settings',{mode:'pair',seconds:30,rounds:1,penalty:1});await b.wait(s=>s.version>=a.state.version);await b.action('ready');await a.wait(s=>s.devices.find(d=>d.id===b.state.you).ready);await a.action('ready');await a.action('start');await b.wait(s=>s.phase==='handoff');assert.equal(a.state.card,null);assert.equal(b.state.card,null);
+ await a.action('settings',{mode:'pair',difficulty,seconds:30,rounds:1,penalty:1});await b.wait(s=>s.version>=a.state.version);await b.action('ready');await a.wait(s=>s.devices.find(d=>d.id===b.state.you).ready);await a.action('ready');await a.action('start');await b.wait(s=>s.phase==='handoff');assert.equal(a.state.settings.difficulty,difficulty);assert.equal(b.state.settings.difficulty,difficulty);assert.equal(a.state.card,null);assert.equal(b.state.card,null);
  await b.action('begin',{},400);await a.action('begin');await b.wait(s=>s.phase==='playing');const firstWord=a.state.card.word;assert.ok(firstWord);assert.equal(b.state.card,null);assert.ok(!JSON.stringify(b.messages).includes(firstWord));
- const firstCard=a.state.card.id;await b.action('card',{card:firstCard,result:'guess'},400);await a.action('card',{card:firstCard,result:'guess'});await a.action('card',{card:firstCard,result:'guess'},400);await b.wait(s=>s.scores.pair===1);assert.equal(a.state.scores.pair,1);
+ const firstCard=a.state.card.id;await b.action('card',{card:firstCard,result:'guess'},400);await a.action('card',{card:firstCard,result:'guess'});await a.action('card',{card:firstCard,result:'guess'},400);await b.wait(s=>s.scores.pair===1);assert.equal(a.state.scores.pair,1);assert.equal(b.state.lastCompleted.word,firstWord);assert.equal(b.state.lastCompleted.result,'guess');
  const word=a.state.card.word,deadline=a.state.deadline,you=a.state.you,ids=a.state.players.map(p=>p.id);a.disconnect();await b.wait(s=>!s.devices.find(d=>d.id===you).online);await a.join(code);await a.connect();assert.equal(a.state.you,you);assert.equal(a.state.card.word,word);assert.equal(a.state.deadline,deadline);assert.deepEqual(a.state.players.map(p=>p.id),ids);await b.wait(s=>s.devices.every(d=>d.online));assert.equal(b.state.card,null);
+ if(quick){
+  const skipped=a.state.card;await a.action('card',{card:skipped.id,result:'skip'});await b.wait(s=>s.lastCompleted?.word===skipped.word);assert.equal(b.state.lastCompleted.result,'skip');assert.equal(b.state.card,null);assert.ok(!JSON.stringify(b.state).includes(a.state.card.word));assert.equal(b.state.scores.pair,0);
+  console.log(`PASS ${difficulty}: HTTPS, module asset, Secure cookie, 2 clients, difficulty, rights, reveal guessed/skipped only, hidden active card, duplicate protection, reconnect.`);
+ } else {
  console.log('PASS: HTTPS, Secure cookie, 2 клиента, синхронизация, права, скрытие слова, повторы, reconnect. Ожидаем серверный таймер первого хода.');
- await a.wait(s=>s.phase==='summary',40000);await b.wait(s=>s.phase==='summary');await a.action('next');await b.wait(s=>s.phase==='handoff');await b.action('begin');await a.wait(s=>s.phase==='playing');assert.equal(a.state.card,null);assert.ok(b.state.card.word);assert.notEqual(b.state.card.word,firstWord);await b.action('card',{card:b.state.card.id,result:'guess'});await a.wait(s=>s.scores.pair===2);
+ await a.wait(s=>s.phase==='summary',40000);await b.wait(s=>s.phase==='summary');assert.equal(a.state.lastCard.word,word);assert.equal(b.state.lastCard,null);await a.action('next');await b.wait(s=>s.phase==='handoff');await b.action('begin');await a.wait(s=>s.phase==='playing');assert.equal(a.state.card,null);assert.ok(b.state.card.word);assert.notEqual(b.state.card.word,firstWord);await b.action('card',{card:b.state.card.id,result:'guess'});await a.wait(s=>s.scores.pair===2);
  console.log('PASS: первый таймер завершён сервером, ход и секретная карточка перешли второму клиенту. Ожидаем итог партии.');
  await a.wait(s=>s.phase==='summary',40000);await a.action('next');await b.wait(s=>s.phase==='finished');assert.equal(a.state.phase,'finished');assert.equal(a.state.scores.pair,2);assert.equal(a.state.turnCount,2);
  console.log('PASS: публичная партия из 2 полных ходов завершена, общий счёт 2.');
+ }
  await b.action('leave');await a.wait(s=>s.devices.length===1);await a.action('leave');
 } finally {clients.forEach(c=>c.disconnect());await Promise.allSettled(clients.map(c=>c.reading));}
