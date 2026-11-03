@@ -24,8 +24,8 @@ export class Game {
       active:active?.id,turn:room.turn,turnCount:room.schedule?.length,round:room.schedule?Math.floor(room.turn/room.rosterSize)+1:0,
       deadline:room.deadline,serverNow:this.now(),card:room.phase==='playing' && active?.device===d.id?{id:room.cardId,word:room.word}:null,
       lastCompleted:['playing','summary','finished'].includes(room.phase)?room.lastCompleted??null:null,
-      lastCard:['summary','finished'].includes(room.phase)&&room.lastCard?.device===d.id?{word:room.lastCard.word,result:room.lastCard.result}:null,
-      history:room.phase==='playing'?[]:room.history, scores:room.scores || {}, reason:room.reason || null};
+      lastCard:['summary','finished'].includes(room.phase)&&room.lastCard?.device===d.id?{id:room.lastCard.id,word:room.lastCard.word,result:room.lastCard.result,claimable:room.lastCard.claimable,explainer:room.lastCard.explainer}:null,
+      pendingLast:!!room.lastCard?.claimable, history:room.phase==='playing'?[]:room.history, scores:room.scores || {}, reason:room.reason || null};
   }
   resetReady(room) { room.devices.forEach(d=>d.ready=false); }
   nextCard(room) {
@@ -35,15 +35,16 @@ export class Game {
   endTurn(room,reason='Время вышло') {
     if(room.word) {
       const last=room.history.at(-1);
-      room.lastCard={word:room.word,device:this.active(room)?.device,result:last?.word===room.word?last.result:'unplayed'};
+      const p=this.active(room),result=last?.word===room.word?last.result:'unplayed';
+      room.lastCard={id:room.cardId,word:room.word,device:p?.device,explainer:p?.id,team:p?.team,result,claimable:reason==='Время вышло'&&result==='unplayed'};
     }
     room.phase='summary';room.word=null;room.cardId=null;room.deadline=null;room.reason=reason;
   }
   score(room, key, delta) {room.scores[key]=(room.scores[key]||0)+delta;}
   advance(room) {
     do {room.turn++;} while(room.turn<room.schedule.length && !room.players.some(p=>p.id===room.schedule[room.turn]&&!p.left));
-    room.phase=room.turn>=room.schedule.length?'finished':'handoff'; room.history=[];room.reason=null;
-    if(room.phase==='handoff') {room.lastCard=null;room.lastCompleted=null;}
+    room.phase=room.turn>=room.schedule.length?'finished':'handoff';room.reason=null;
+    if(room.phase==='handoff') {room.history=[];room.lastCard=null;room.lastCompleted=null;}
   }
   leave(room,d) {
     d.left=true; d.connections=0; room.players.filter(p=>p.device===d.id).forEach(p=>p.left=true);
@@ -111,13 +112,31 @@ export class Game {
         if(a.result==='guess'||a.result==='skip')room.lastCompleted=completed;
         this.nextCard(room);break;
       }
-      case 'next': if(room.phase!=='summary') fail('Сначала завершите ход');this.host(room,d);this.advance(room);break;
+      case 'awardLast': {
+        const card=room.lastCard;
+        if(!['summary','finished'].includes(room.phase)||!card?.claimable||card.device!==d.id) fail('Последнее слово может зачесть только объясняющий после таймера');
+        if(a.card!==card.id) fail('Карточка уже обработана');
+        let winner;
+        if(room.settings.mode==='ffa') {winner=room.players.find(p=>p.id===a.winner&&!p.left&&p.id!==card.explainer);if(!winner) fail('Укажите, кто первым угадал');}
+        if(room.settings.mode==='pair') this.score(room,'pair',1);
+        if(room.settings.mode==='teams') this.score(room,card.team,1);
+        if(room.settings.mode==='ffa') {this.score(room,card.explainer,1);this.score(room,winner.id,1);}
+        const completed={word:card.word,result:'guess',winner:winner?.name,delta:1};
+        room.history.push(completed);room.lastCompleted=completed;card.result='guess';card.claimable=false;break;
+      }
+      case 'next': {
+        if(room.phase!=='summary') fail('Сначала завершите ход');this.host(room,d);
+        const hasNext=room.schedule.slice(room.turn+1).some(id=>room.players.some(p=>p.id===id&&!p.left));
+        if(room.lastCard?.claimable&&hasNext&&a.discardLast!==true) fail('Последнее слово ещё можно зачесть. Подтвердите продолжение без очка');
+        if(a.discardLast===true&&room.lastCard) room.lastCard.claimable=false;
+        this.advance(room);break;
+      }
       case 'recover': {
         this.host(room,d);const p=this.active(room);const owner=room.devices.find(x=>x.id===p?.device);
         if(!['handoff','playing'].includes(room.phase)||!owner||owner.connections||this.now()-owner.disconnectedAt<this.graceMs) fail('Завершить ход можно после 15 секунд отсутствия объясняющего');
         this.endTurn(room,'Ход завершён ведущим: устройство отключилось');break;
       }
-      case 'restart': this.host(room,d);if(room.phase!=='finished') fail('Сначала закончите партию');room.phase='lobby';room.players=room.players.filter(p=>!p.left);room.history=[];room.lastCard=null;room.lastCompleted=null;room.scores={};room.schedule=null;room.turn=null;room.reason=null;this.resetReady(room);break;
+      case 'restart': this.host(room,d);if(room.phase!=='finished') fail('Сначала закончите партию');if(room.lastCard?.claimable&&a.discardLast!==true) fail('Подтвердите новую игру без зачёта последнего слова');room.phase='lobby';room.players=room.players.filter(p=>!p.left);room.history=[];room.lastCard=null;room.lastCompleted=null;room.scores={};room.schedule=null;room.turn=null;room.reason=null;this.resetReady(room);break;
       case 'removeDevice': {
         this.host(room,d);const target=room.devices.find(x=>x.id===a.device&&!x.left);
         if(!target||target===d||target.connections) fail('Исключить можно только отключённое устройство');

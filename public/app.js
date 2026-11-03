@@ -4,7 +4,7 @@ let state,events,busy=false,clockOffset=0,toastTimer,selectedWinner='';
 const $=s=>document.querySelector(s);
 function toast(s){$('#toast').textContent=s;$('#toast').style.display='block';clearTimeout(toastTimer);toastTimer=setTimeout(()=>$('#toast').style.display='none',5000);}
 async function request(path,body){const response=await fetch(path,{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify(body)});const data=await response.json();if(!response.ok)throw Error(data.error);return data;}
-function accept(s){if(state&&s.version<state.version)return;if(s.card?.id!==state?.card?.id)selectedWinner='';state=s;if(!s.players.some(p=>p.id===selectedWinner&&!p.left&&p.id!==s.active))selectedWinner='';clockOffset=s.serverNow-Date.now();render();}
+function accept(s){if(state&&s.version<state.version)return;if((s.card?.id??s.lastCard?.id)!==(state?.card?.id??state?.lastCard?.id))selectedWinner='';state=s;if(!s.players.some(p=>p.id===selectedWinner&&!p.left&&p.id!==(s.lastCard?.claimable?s.lastCard.explainer:s.active)))selectedWinner='';clockOffset=s.serverNow-Date.now();render();}
 async function enter(code){try{accept(await request(`/api/rooms/${code}/join`,{}));attach();}catch(e){history.replaceState(null,'','/');state=null;home();toast(e.message);}}
 function attach(){history.replaceState(null,'',`/?room=${state.code}`);events?.close();events=new EventSource(`/api/rooms/${state.code}/events`);events.onmessage=e=>accept(JSON.parse(e.data));events.onopen=()=>connection.textContent='● В комнате';events.onerror=()=>{connection.textContent='● Восстанавливаем связь…';};}
 async function act(type,data={}){if(busy)return;busy=true;try{const s=await request(`/api/rooms/${state.code}/action`,{type,version:state.version,...data});if(type==='leave'){events?.close();state=null;history.replaceState(null,'','/');home();connection.textContent='Можно играть локально';}else accept(s);}catch(e){toast(e.message);}finally{busy=false;}}
@@ -31,7 +31,12 @@ function render(){if(!state)return;const s=state.settings,host=state.host===stat
  for(const [id,draft]of Object.entries(drafts)){const el=document.getElementById(id);if(el&&(id==='name'||draft.focused)){el.value=draft.value;if(draft.focused){el.focus();if(el.tagName==='INPUT')el.setSelectionRange(draft.start,draft.start);}}}
  $('#copy').onclick=async()=>{try{await navigator.clipboard.writeText(location.href);toast('Ссылка скопирована');}catch{toast(location.href);}};
  $('#leave').onclick=()=>{if(confirm('Выйти из комнаты? Ваши игроки покинут партию.'))act('leave');};
- const bind=(id,type)=>{if($(id))$(id).onclick=()=>act(type);};for(const id of ['ready','start','begin','next','restart','recover'])bind('#'+id,id);
+ const bind=(id,type)=>{if($(id))$(id).onclick=()=>act(type);};for(const id of ['ready','start','begin','recover'])bind('#'+id,id);
+ for(const type of ['next','restart'])if($('#'+type))$('#'+type).onclick=()=>{
+  const discard=state.pendingLast&&(type==='restart'||state.turn+1<state.turnCount);
+  if(!discard||confirm('Последнее слово ещё можно зачесть. Продолжить без этого очка?'))act(type,discard?{discardLast:true}:{});
+ };
+ if($('#award-last')){const card=state.lastCard;$('#award-last').onclick=()=>act('awardLast',{card:card.id,winner:selectedWinner});}
  if($('#add'))$('#add').onsubmit=async e=>{e.preventDefault();const name=$('#name').value;await act('addPlayer',{name});if(state.players.some(p=>p.name===name.trim()))$('#name').value='';};
  if($('#difficulty')){const describeDifficulty=()=>{const d=state.difficulties.find(d=>d.id===$('#difficulty').value);$('#difficulty-description').textContent=d.description+' Карточек в наборе: '+d.count+'. Сохраните правила перед стартом.';};$('#difficulty').onchange=describeDifficulty;describeDifficulty();}
  if($('#settings'))$('#settings').onsubmit=e=>{e.preventDefault();act('settings',{mode:$('#mode').value,difficulty:$('#difficulty').value,seconds:+$('#seconds').value,rounds:+$('#rounds').value,penalty:+$('#penalty').value});};
@@ -40,7 +45,7 @@ function render(){if(!state)return;const s=state.settings,host=state.host===stat
  app.querySelectorAll('[data-winner]').forEach(button=>button.onclick=()=>{selectedWinner=button.dataset.winner;app.querySelectorAll('[data-winner]').forEach(choice=>choice.setAttribute('aria-pressed',String(choice.dataset.winner===selectedWinner)));});
  app.querySelectorAll('[data-result]').forEach(b=>b.onclick=()=>act('card',{card:state.card?.id,result:b.dataset.result,winner:selectedWinner}));updateTimer();
 }
-function lastWordBlock(){const card=state.lastCard;return card?`<div class="wordcard"><div class="subtle">Последнее слово хода</div><div class="word">${esc(card.word)}</div><p class="subtle">${card.result==='unplayed'?'Время закончилось. Карточка не засчитана.':({guess:'Угадано',skip:'Пропуск',violation:'Нарушение'})[card.result]}</p></div>`:'';}
+function lastWordBlock(){const card=state.lastCard;return card?`<div class="wordcard"><div class="subtle">Последнее слово хода</div><div class="word">${esc(card.word)}</div><p class="subtle">${card.result==='unplayed'?'Время закончилось. Карточка не засчитана.':({guess:'Угадано',skip:'Пропуск',violation:'Нарушение'})[card.result]}</p>${card.claimable?`${state.settings.mode==='ffa'?`<p>Кто первым угадал?</p>${guesserButtons(state.players,card.explainer,selectedWinner)}`:''}<button id="award-last">Зачесть последнее слово · +1</button>`:''}</div>`:'';}
 function completedWordBlock(){const card=state.lastCompleted;return card?`<div class="rule completed-word" aria-live="polite"><div class="subtle">${card.result==='guess'?'Последнее угаданное слово':'Последнее пропущенное слово'}</div><strong>${esc(card.word)}</strong></div>`:'';}
 function historyList(){return `<div class="history">${state.history.map(h=>`<div class="row"><strong class="grow">${esc(h.word)}</strong><span class="subtle">${({guess:'Угадано',skip:'Пропуск',violation:'Нарушение'})[h.result]}${h.winner?' · '+esc(h.winner):''}</span><span>${h.delta>0?'+':''}${h.delta}</span></div>`).join('')||'<p class="subtle">Нет обработанных карточек.</p>'}</div><div class="divider"></div>`;}
 function updateTimer(){if($('#timer'))$('#timer').textContent=`${Math.max(0,Math.ceil((state.deadline-Date.now()-clockOffset)/1000))} с`;}
