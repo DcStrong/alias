@@ -1,5 +1,6 @@
 import {test} from 'node:test';
 import assert from 'node:assert/strict';
+import {assertNoSecretValue} from '../test-support/privacy.js';
 import {setTimeout as delay} from 'node:timers/promises';
 import {createServer} from '../server.js';
 import {WORDS, HARD_WORDS, MEDIUM_WORDS} from '../words.js';
@@ -50,7 +51,7 @@ test('Локальная пара: передача, штраф, полные к
 test('Два клиента: скрытая карточка, права, повтор команды и reconnect',async t=>{
  const f=await fixture(t),{a,b,code}=await prepare(f,{online:true});
  await b.action('begin',{},400);await a.action('begin');await b.wait(s=>s.phase==='playing');
- assert.equal(b.state.card,null);assert.ok(!JSON.stringify(b.messages).includes(a.state.card.word));
+ assert.equal(b.state.card,null);assertNoSecretValue(b.messages,a.state.card.word);
  await b.action('card',{card:a.state.card.id,result:'guess'},400);await b.action('next',{},400);
  const card=a.state.card.id, version=a.state.version;await a.action('card',{card,result:'guess'});
  await a.action('card',{card,result:'guess',version},400);
@@ -156,7 +157,7 @@ for(const difficulty of ['basic','medium','hard'])for(const mode of ['pair','ffa
   const f=await fixture(t),names=mode==='pair'?['Аня','Борис']:mode==='ffa'?['Аня','Борис','Вера']:['Аня','Борис','Вера','Глеб'];
   const {a,b,code}=await prepare(f,{mode,difficulty,online:true,names,penalty:1});
   await a.action('begin');await b.wait(s=>s.phase==='playing');const word=a.state.card.word;
-  assert.ok(({basic:WORDS,medium:MEDIUM_WORDS,hard:HARD_WORDS}[difficulty]).includes(word));assert.equal(b.state.card,null);assert.ok(!JSON.stringify(b.messages).includes(word));assert.equal(b.state.settings.difficulty,difficulty);
+  assert.ok(({basic:WORDS,medium:MEDIUM_WORDS,hard:HARD_WORDS}[difficulty]).includes(word));assert.equal(b.state.card,null);assertNoSecretValue(b.messages,word);assert.equal(b.state.settings.difficulty,difficulty);
   await a.action('card',{card:a.state.card.id,result:'guess',winner:a.state.players[1].id});
   const key=mode==='pair'?'pair':mode==='teams'?'A':a.state.players[0].id;assert.equal(a.state.scores[key],1);if(mode==='ffa')assert.equal(a.state.scores[a.state.players[1].id],1);
   await a.action('card',{card:a.state.card.id,result:'skip'});assert.equal(a.state.scores[key],0);
@@ -170,15 +171,15 @@ for(const difficulty of ['basic','medium','hard'])for(const mode of ['pair','ffa
 
 test('Завершённая карточка раскрывается, следующая скрыта, нарушение не раскрывается',async t=>{
  const f=await fixture(t),{a,b}=await prepare(f,{online:true,difficulty:'hard'});await a.action('begin');await b.wait(s=>s.phase==='playing');assert.equal(b.state.lastCompleted,null);
- const first=a.state.card;await a.action('card',{card:first.id,result:'guess'});await b.wait(s=>s.lastCompleted?.word===first.word);assert.equal(b.state.lastCompleted.result,'guess');assert.equal(b.state.card,null);assert.ok(!JSON.stringify(b.state).includes(a.state.card.word));
+ const first=a.state.card;await a.action('card',{card:first.id,result:'guess'});await b.wait(s=>s.lastCompleted?.word===first.word);assert.equal(b.state.lastCompleted.result,'guess');assert.equal(b.state.card,null);assertNoSecretValue(b.state,a.state.card.word);
  const second=a.state.card;await a.action('card',{card:second.id,result:'skip'});await b.wait(s=>s.lastCompleted?.word===second.word);assert.equal(b.state.lastCompleted.result,'skip');assert.equal(b.state.scores.pair,1);
  const third=a.state.card;await b.wait(s=>s.version>=a.state.version);await b.action('card',{card:third.id,result:'guess'},400);await a.action('card',{card:second.id,result:'guess'},400);assert.equal(a.state.lastCompleted.word,second.word);
- await a.action('card',{card:third.id,result:'violation'});await b.wait(s=>s.version>=a.state.version);assert.equal(b.state.lastCompleted.word,second.word);assert.ok(!JSON.stringify(b.state).includes(third.word));assert.ok(!JSON.stringify(b.state).includes(a.state.card.word));
+ await a.action('card',{card:third.id,result:'violation'});await b.wait(s=>s.version>=a.state.version);assert.equal(b.state.lastCompleted.word,second.word);assertNoSecretValue(b.state,third.word);assertNoSecretValue(b.state,a.state.card.word);
 });
 
 test('Последнее слово приватно в итогах; обычная card-команда после таймера запрещена',async t=>{
  const f=await fixture(t),{a,b,code}=await prepare(f,{online:true});await a.action('begin');const first=a.state.card;await f.advance(60000);await a.wait(s=>s.phase==='summary');await b.wait(s=>s.phase==='summary');
- assert.equal(a.state.card,null);assert.equal(a.state.lastCard.word,first.word);assert.equal(a.state.lastCard.result,'unplayed');assert.equal(b.state.lastCard,null);assert.ok(!JSON.stringify(b.state).includes(first.word));
+ assert.equal(a.state.card,null);assert.equal(a.state.lastCard.word,first.word);assert.equal(a.state.lastCard.result,'unplayed');assert.equal(b.state.lastCard,null);assertNoSecretValue(b.state,first.word);
  await a.action('card',{card:first.id,result:'guess'},400);assert.deepEqual(a.state.scores,{});await a.join(code);assert.equal(a.state.lastCard.word,first.word);await a.action('next',{discardLast:true});assert.equal(a.state.phase,'handoff');assert.equal(a.state.lastCard,null);assert.equal(a.state.lastCompleted,null);
  await b.wait(s=>s.phase==='handoff');await b.action('begin');const last=b.state.card;await f.advance(60000);await a.wait(s=>s.phase==='summary');await b.wait(s=>s.phase==='summary');await a.action('next',{discardLast:true});await b.wait(s=>s.phase==='finished');assert.equal(b.state.lastCard.word,last.word);assert.equal(a.state.lastCard,null);assert.equal(b.state.deadline,null);assert.deepEqual(b.state.scores,{});
  await a.action('restart',{discardLast:true});await b.wait(s=>s.phase==='lobby');assert.equal(b.state.lastCard,null);assert.equal(b.state.lastCompleted,null);
@@ -188,7 +189,7 @@ test('Поздний зачёт пары: приватность, reconnect, п�
  const f=await fixture(t),{a,b,code}=await prepare(f,{online:true});await a.action('begin');const card=a.state.card;
  await a.action('awardLast',{card:card.id},400);
  await f.advance(60000);await a.wait(s=>s.phase==='summary');await b.wait(s=>s.phase==='summary');
- assert.equal(a.state.lastCard.id,card.id);assert.equal(a.state.lastCard.claimable,true);assert.equal(b.state.pendingLast,true);assert.equal(b.state.lastCard,null);assert.ok(!JSON.stringify(b.state).includes(card.word));
+ assert.equal(a.state.lastCard.id,card.id);assert.equal(a.state.lastCard.claimable,true);assert.equal(b.state.pendingLast,true);assert.equal(b.state.lastCard,null);assertNoSecretValue(b.state,card.word);
  await a.join(code);await b.wait(s=>s.version>=a.state.version);assert.equal(a.state.lastCard.id,card.id);
  await b.action('awardLast',{card:card.id},400);await a.action('awardLast',{card:'wrong'},400);await a.action('card',{card:card.id,result:'guess'},400);
  const version=a.state.version;
