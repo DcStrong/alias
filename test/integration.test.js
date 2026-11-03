@@ -247,7 +247,7 @@ test('Команды: предварительная очередь череду
  await a.action('ready');await a.action('start');assert.equal(a.state.turnCount,10);
  for(const id of [...expected,...expected]){
   assert.equal(a.state.active,id);assert.deepEqual(a.state.turnOrder,expected);
-  await a.action('begin');await f.advance(30000);await a.wait(s=>s.phase==='summary');await a.action('next');
+  await a.action('begin');await f.advance(30000);await a.wait(s=>s.phase==='summary');await a.action('next',{discardLast:true});
  }
  assert.equal(a.state.phase,'finished');
 });
@@ -273,7 +273,7 @@ test('Команды: только ведущий меняет порядок в
  for(const phase of ['handoff','playing','summary','finished']){
   if(phase==='playing')await a.action('begin');
   if(phase==='summary'){await f.advance(30000);await a.wait(s=>s.phase==='summary');}
-  if(phase==='finished'){while(a.state.phase!=='finished'){await a.action('next');if(a.state.phase==='finished')break;await a.action('begin');await f.advance(30000);await a.wait(s=>s.phase==='summary');}}
+  if(phase==='finished'){while(a.state.phase!=='finished'){await a.action('next',{discardLast:true});if(a.state.phase==='finished')break;await a.action('begin');await f.advance(30000);await a.wait(s=>s.phase==='summary');}}
   assert.equal(a.state.phase,phase);await a.action('movePlayer',{player:anya.id,direction:'up'},400);
  }
 });
