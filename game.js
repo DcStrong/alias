@@ -34,6 +34,10 @@ export class Game {
       pendingLast:!!room.lastCard?.claimable, history:room.phase==='playing'?[]:room.history, scores:room.scores || {}, reason:room.reason || null};
   }
   resetReady(room) { room.devices.forEach(d=>d.ready=false); }
+  resetGame(room) {
+    room.players=room.players.filter(p=>!p.left);
+    room.phase='lobby';room.history=[];room.lastCard=null;room.lastCompleted=null;room.scores={};room.deck=null;room.schedule=null;room.rosterSize=null;room.turn=null;room.reason=null;room.deadline=null;room.word=null;room.cardId=null;this.resetReady(room);
+  }
   nextCard(room) {
     if(!room.deck.length) { this.endTurn(room,'Словарь закончился'); room.phase='finished'; return; }
     room.word=room.deck.pop(); room.cardId=randomUUID();
@@ -151,7 +155,8 @@ export class Game {
         if(!['handoff','playing'].includes(room.phase)||!owner||owner.connections||this.now()-owner.disconnectedAt<this.graceMs) fail('Завершить ход можно после 15 секунд отсутствия объясняющего');
         this.endTurn(room,'Ход завершён ведущим: устройство отключилось');break;
       }
-      case 'restart': this.host(room,d);if(room.phase!=='finished') fail('Сначала закончите партию');if(room.lastCard?.claimable&&a.discardLast!==true) fail('Подтвердите новую игру без зачёта последнего слова');room.phase='lobby';room.players=room.players.filter(p=>!p.left);room.history=[];room.lastCard=null;room.lastCompleted=null;room.scores={};room.schedule=null;room.turn=null;room.reason=null;this.resetReady(room);break;
+      case 'restart': this.host(room,d);if(room.phase!=='finished') fail('Сначала закончите партию');if(room.lastCard?.claimable&&a.discardLast!==true) fail('Подтвердите новую игру без зачёта последнего слова');this.resetGame(room);break;
+      case 'endGame': this.host(room,d);if(room.phase!=='lobby')this.resetGame(room);break;
       case 'removeDevice': {
         this.host(room,d);const target=room.devices.find(x=>x.id===a.device&&!x.left);
         if(!target||target===d||target.connections) fail('Исключить можно только отключённое устройство');
