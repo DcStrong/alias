@@ -1,0 +1,8 @@
+[Unit]
+Description=Renew Alias IP TLS certificate
+After=network-online.target nginx.service
+Wants=network-online.target
+
+[Service]
+Type=oneshot
+ExecStart=/opt/alias-certbot/bin/certbot renew --quiet --no-random-sleep-on-renew

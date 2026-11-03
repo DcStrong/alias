@@ -1,0 +1,40 @@
+[Unit]
+Description=Alias multiplayer game
+After=network-online.target
+Wants=network-online.target
+
+[Service]
+Type=simple
+User=alias
+Group=alias
+WorkingDirectory=/opt/alias/current
+ExecStart=/opt/alias/node/bin/node /opt/alias/current/server.js
+Environment=NODE_ENV=production
+Environment=HOST=127.0.0.1
+Environment=PORT=3000
+Environment=COOKIE_SECURE=true
+Restart=always
+RestartSec=4
+TimeoutStopSec=15
+NoNewPrivileges=true
+PrivateTmp=true
+ProtectSystem=strict
+ProtectHome=true
+ProtectKernelTunables=true
+ProtectKernelModules=true
+ProtectControlGroups=true
+RestrictSUIDSGID=true
+LockPersonality=true
+CapabilityBoundingSet=
+RestrictAddressFamilies=AF_INET AF_INET6 AF_UNIX
+UMask=0077
+MemoryMax=512M
+TasksMax=64
+StandardOutput=journal
+StandardError=journal
+SyslogIdentifier=alias
+LogRateLimitIntervalSec=30s
+LogRateLimitBurst=50
+
+[Install]
+WantedBy=multi-user.target

@@ -1,5 +1,6 @@
 import http from 'node:http';
 import {readFile} from 'node:fs/promises';
+import {realpathSync} from 'node:fs';
 import {fileURLToPath} from 'node:url';
 import {Game} from './game.js';
 export function createServer(options={}) {
@@ -22,13 +23,13 @@ export function createServer(options={}) {
    let body={};if(req.method==='POST'){let raw='';for await(const chunk of req){raw+=chunk;if(raw.length>8192){json(413,{error:'Запрос слишком большой'});return;}}body=JSON.parse(raw||'{}');}
    if(url.pathname==='/api/rooms'&&req.method==='POST') {
     if(game.rooms.size>=500)return json(503,{error:'Сервер заполнен'});
-    const room=game.create(),d=game.join(room);res.setHeader('Set-Cookie',`alias_${room.code}=${d.token}; HttpOnly; SameSite=Strict; Path=/api/rooms/${room.code}${req.socket.encrypted?'; Secure':''}`);return json(201,game.view(room,d));
+    const room=game.create(),d=game.join(room);res.setHeader('Set-Cookie',`alias_${room.code}=${d.token}; HttpOnly; SameSite=Strict; Path=/api/rooms/${room.code}${(req.socket.encrypted||process.env.COOKIE_SECURE==='true')?'; Secure':''}`);return json(201,game.view(room,d));
    }
    const match=url.pathname.match(/^\/api\/rooms\/([A-F0-9]{6})\/(join|events|action)$/);if(!match)return json(404,{error:'Не найдено'});
    const room=game.rooms.get(match[1]);if(!room)return json(404,{error:'Комната не найдена или сервер был перезапущен'});
    const token=req.headers.cookie?.split(';').map(x=>x.trim()).find(x=>x.startsWith(`alias_${room.code}=`))?.split('=')[1];
    if(match[2]==='join'&&req.method==='POST') {
-    const d=game.join(room,token);res.setHeader('Set-Cookie',`alias_${room.code}=${d.token}; HttpOnly; SameSite=Strict; Path=/api/rooms/${room.code}${req.socket.encrypted?'; Secure':''}`);room.version++;broadcast(room);return json(200,game.view(room,d));
+    const d=game.join(room,token);res.setHeader('Set-Cookie',`alias_${room.code}=${d.token}; HttpOnly; SameSite=Strict; Path=/api/rooms/${room.code}${(req.socket.encrypted||process.env.COOKIE_SECURE==='true')?'; Secure':''}`);room.version++;broadcast(room);return json(200,game.view(room,d));
    }
    const d=game.device(room,token);
    if(match[2]==='events'&&req.method==='GET') {
@@ -44,6 +45,6 @@ export function createServer(options={}) {
  server.on('close',()=>{clearInterval(timer);for(const res of [...streams.keys()]){streams.delete(res);res.end();}});
  return {server,game};
 }
-if(process.argv[1]===fileURLToPath(import.meta.url)) {
- const port=Number(process.env.PORT||3000);const {server}=createServer();server.listen(port,process.env.HOST||'0.0.0.0',()=>console.log(`Alias: http://localhost:${port} (HOST=${process.env.HOST||'0.0.0.0'})`));
+if(process.argv[1]&&realpathSync(process.argv[1])===fileURLToPath(import.meta.url)) {
+ const port=Number(process.env.PORT||3000);const {server}=createServer();server.listen(port,process.env.HOST||'0.0.0.0',()=>console.log(`Alias: http://localhost:${server.address().port} (HOST=${process.env.HOST||'0.0.0.0'})`));
 }
