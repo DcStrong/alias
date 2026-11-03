@@ -2,6 +2,7 @@ import {test} from 'node:test';
 import assert from 'node:assert/strict';
 import {setTimeout as delay} from 'node:timers/promises';
 import {createServer} from '../server.js';
+import {WORDS, HARD_WORDS} from '../words.js';
 
 async function fixture(t){
  let clock=Date.now();const {server}=createServer({now:()=>clock});await new Promise(resolve=>server.listen(0,'127.0.0.1',resolve));
@@ -20,12 +21,12 @@ async function fixture(t){
  }
  return {client:()=>new Client(),base,advance:async ms=>{clock+=ms;await delay(280);}};
 }
-async function prepare(f,{mode='pair',rounds=1,penalty=0,online=false,names=['Аня','Борис']}={}){
+async function prepare(f,{mode='pair',rounds=1,penalty=0,online=false,difficulty='basic',names=['Аня','Борис']}={}){
  const a=f.client();const code=await a.create();await a.connect();let b;
  if(online){b=f.client();await b.join(code);await b.connect();await a.wait(s=>s.devices.length===2&&s.devices.every(d=>d.online));}
  for(let i=0;i<names.length;i++){const c=online&&i===1?b:a;await c.wait(s=>s.players.length===i);await c.action('addPlayer',{name:names[i],team:i%2?'B':'A'});}
  await a.wait(s=>s.players.length===names.length);
- await a.action('settings',{mode,seconds:60,rounds,penalty});
+ await a.action('settings',{mode,difficulty,seconds:60,rounds,penalty});
  if(b){await b.wait(s=>s.version>=a.state.version);await b.action('ready');await a.wait(s=>s.devices.find(d=>d.id===b.state.you).ready);}
  await a.action('ready');await a.action('start');if(b)await b.wait(s=>s.phase==='handoff');return {a,b,code};
 }
@@ -121,3 +122,48 @@ test('Сессионная cookie сохраняет возврат в долг�
  const f=await fixture(t),{a,code}=await prepare(f);assert.match(a.lastSetCookie,/HttpOnly/);assert.match(a.lastSetCookie,/SameSite=Strict/);assert.doesNotMatch(a.lastSetCookie,/Max-Age|Expires/i);
  const you=a.state.you,ids=a.state.players.map(p=>p.id);await f.advance(25*60*60*1000);a.disconnect();await delay(20);await a.join(code);await a.connect();assert.equal(a.state.you,you);assert.deepEqual(a.state.players.map(p=>p.id),ids);assert.equal(a.state.phase,'handoff');await a.action('begin');assert.ok(a.state.card.word);
 });
+
+test('Сложность: базовая по умолчанию, hard синхронизируется и сбрасывает готовность',async t=>{
+ const f=await fixture(t),a=f.client(),b=f.client();const code=await a.create();assert.equal(a.state.settings.difficulty,'basic');await a.connect();await b.join(code);await b.connect();await a.wait(s=>s.devices.length===2);
+ await a.action('addPlayer',{name:'Аня'});await b.wait(s=>s.players.length===1);await b.action('addPlayer',{name:'Борис'});await a.wait(s=>s.players.length===2);
+ await a.action('ready');await b.wait(s=>s.devices.find(d=>d.id===a.state.you).ready);await b.action('ready');await a.wait(s=>s.devices.every(d=>d.ready));
+ await a.action('settings',{mode:'pair',seconds:60,rounds:1,penalty:0,difficulty:'hard'});await b.wait(s=>s.settings.difficulty==='hard');assert.ok(a.state.devices.every(d=>!d.ready));assert.ok(b.state.devices.every(d=>!d.ready));assert.ok(a.state.difficulties.some(d=>d.id==='hard'&&d.count>=400));
+ await b.action('settings',{mode:'pair',seconds:60,rounds:1,penalty:0,difficulty:'basic'},400);assert.equal(b.state.settings.difficulty,'hard');
+ for(const difficulty of ['expert','__proto__',null,42])await a.action('settings',{mode:'pair',seconds:60,rounds:1,penalty:0,difficulty},400);
+ // Legacy clients omit the new field: preserve the chosen difficulty.
+ await a.action('settings',{mode:'pair',seconds:90,rounds:1,penalty:0});assert.equal(a.state.settings.difficulty,'hard');
+ await b.wait(s=>s.version>=a.state.version);await b.action('ready');await a.wait(s=>s.devices.find(d=>d.id===b.state.you).ready);await a.action('ready');await a.action('start');await a.action('settings',{mode:'pair',seconds:60,rounds:1,penalty:0,difficulty:'basic'},400);
+});
+
+for(const [difficulty,entries] of [['basic',WORDS],['hard',HARD_WORDS]]) {
+ test(`Набор ${difficulty}: полная колода без повторов и подмешивания другой сложности`,async t=>{
+  const f=await fixture(t),{a}=await prepare(f,{difficulty});assert.equal(a.state.settings.difficulty,difficulty);
+  const metadata=a.state.difficulties.find(d=>d.id===difficulty);assert.equal(metadata.count,entries.length);assert.deepEqual(Object.keys(metadata).sort(),['count','description','id','label']);
+  assert.ok(a.state.difficulties.every(d=>!Object.hasOwn(d,'words')));await a.action('begin');const seen=new Set();
+  for(let i=0;i<entries.length;i++){
+   assert.equal(a.state.phase,'playing');assert.ok(entries.includes(a.state.card.word),'Карточка из другого набора');assert.ok(!seen.has(a.state.card.word),'Повтор карточки');seen.add(a.state.card.word);
+   await a.action('card',{card:a.state.card.id,result:'skip'});
+  }
+  assert.equal(seen.size,entries.length);assert.equal(a.state.phase,'finished');assert.equal(a.state.card,null);assert.equal(a.state.reason,'Словарь закончился');
+  if(difficulty==='hard')assert.ok([...seen].some(word=>word.includes(' ')),'В игре нет словосочетаний');
+  await a.action('restart');assert.equal(a.state.settings.difficulty,difficulty);assert.equal(a.state.phase,'lobby');
+  const other=difficulty==='basic'?'hard':'basic';await a.action('settings',{mode:'pair',difficulty:other,seconds:60,rounds:1,penalty:0});await a.action('ready');await a.action('start');await a.action('begin');assert.ok((other==='hard'?HARD_WORDS:WORDS).includes(a.state.card.word));
+ });
+}
+
+for(const difficulty of ['basic','hard'])for(const mode of ['pair','ffa','teams']) {
+ test(`${difficulty} / ${mode}: два устройства, очки, таймер, смена роли и reconnect`,async t=>{
+  const f=await fixture(t),names=mode==='pair'?['Аня','Борис']:mode==='ffa'?['Аня','Борис','Вера']:['Аня','Борис','Вера','Глеб'];
+  const {a,b,code}=await prepare(f,{mode,difficulty,online:true,names,penalty:1});
+  await a.action('begin');await b.wait(s=>s.phase==='playing');const word=a.state.card.word;
+  assert.ok((difficulty==='hard'?HARD_WORDS:WORDS).includes(word));assert.equal(b.state.card,null);assert.ok(!JSON.stringify(b.messages).includes(word));assert.equal(b.state.settings.difficulty,difficulty);
+  await a.action('card',{card:a.state.card.id,result:'guess',winner:a.state.players[1].id});
+  const key=mode==='pair'?'pair':mode==='teams'?'A':a.state.players[0].id;assert.equal(a.state.scores[key],1);if(mode==='ffa')assert.equal(a.state.scores[a.state.players[1].id],1);
+  await a.action('card',{card:a.state.card.id,result:'skip'});assert.equal(a.state.scores[key],0);
+  const deadline=a.state.deadline, card=a.state.card;a.disconnect();await b.wait(s=>!s.devices.find(d=>d.id===a.state.you).online);await a.join(code);await a.connect();assert.equal(a.state.settings.difficulty,difficulty);assert.deepEqual(a.state.card,card);assert.equal(a.state.deadline,deadline);
+  await f.advance(60000);await a.wait(s=>s.phase==='summary');await a.action('next');await b.wait(s=>s.phase==='handoff');assert.equal(b.state.card,null);await b.action('begin');await a.wait(s=>s.phase==='playing');assert.equal(a.state.card,null);assert.ok((difficulty==='hard'?HARD_WORDS:WORDS).includes(b.state.card.word));
+  await f.advance(60000);await a.wait(s=>s.phase==='summary');await a.action('next');
+  for(let turn=2;turn<names.length;turn++){assert.equal(a.state.phase,'handoff');await a.action('begin');await f.advance(60000);await a.wait(s=>s.phase==='summary');await a.action('next');}
+  assert.equal(a.state.phase,'finished');assert.equal(a.state.turnCount,names.length);assert.equal(a.state.settings.difficulty,difficulty);
+ });
+}

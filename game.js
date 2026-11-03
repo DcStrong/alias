@@ -1,12 +1,12 @@
 import { randomBytes, randomInt, randomUUID } from 'node:crypto';
-import { WORDS } from './words.js';
+import { WORD_SETS, DIFFICULTIES } from './words.js';
 const fail = (message) => { throw new Error(message); };
 export class Game {
   constructor({now = Date.now, turnMs, graceMs = 15000} = {}) { this.rooms = new Map(); this.now = now; this.turnMs = turnMs; this.graceMs = graceMs; }
   device(room, token) { return room.devices.find(d => d.token === token && !d.left) || fail('Войдите в комнату заново'); }
   create() {
     let code; do { code = randomBytes(4).toString('hex').slice(0,6).toUpperCase(); } while(this.rooms.has(code));
-    const room = {code, devices:[], players:[], host:null, phase:'lobby', settings:{mode:'pair',seconds:60,rounds:3,penalty:0}, version:0, touched:this.now(), history:[]};
+    const room = {code, devices:[], players:[], host:null, phase:'lobby', settings:{mode:'pair',difficulty:'basic',seconds:60,rounds:3,penalty:0}, version:0, touched:this.now(), history:[]};
     this.rooms.set(code, room); return room;
   }
   join(room, token) {
@@ -19,7 +19,7 @@ export class Game {
   connected(room,p) { return room.devices.some(d=>d.id===p.device && !d.left && d.connections>0); }
   view(room,d) {
     const active=this.active(room);
-    return {code:room.code,version:room.version,phase:room.phase,host:room.host,you:d.id,settings:room.settings,
+    return {code:room.code,version:room.version,phase:room.phase,host:room.host,you:d.id,settings:room.settings,difficulties:DIFFICULTIES,
       players:room.players.map(p=>({...p,online:this.connected(room,p)})), devices:room.devices.filter(x=>!x.left).map(x=>({id:x.id,ready:x.ready,online:x.connections>0})),
       active:active?.id,turn:room.turn,turnCount:room.schedule?.length,round:room.schedule?Math.floor(room.turn/room.rosterSize)+1:0,
       deadline:room.deadline,serverNow:this.now(),card:room.phase==='playing' && active?.device===d.id?{id:room.cardId,word:room.word}:null,
@@ -68,8 +68,9 @@ export class Game {
       case 'team': {lobby();const p=room.players.find(p=>p.id===a.player);if(!p) fail('Игрок не найден');if(p.device!==d.id)this.host(room,d);p.team=a.team==='B'?'B':'A';this.resetReady(room);break;}
       case 'settings': {
         lobby();this.host(room,d);const {mode,seconds,rounds,penalty}=a;
-        if(!['pair','ffa','teams'].includes(mode)||![30,60,90,120].includes(seconds)||!Number.isInteger(rounds)||rounds<1||rounds>10||![0,1].includes(penalty)) fail('Некорректные настройки');
-        room.settings={mode,seconds,rounds,penalty};this.resetReady(room);break;
+        const difficulty=a.difficulty===undefined?room.settings.difficulty:a.difficulty;
+        if(!['basic','hard'].includes(difficulty)||!['pair','ffa','teams'].includes(mode)||![30,60,90,120].includes(seconds)||!Number.isInteger(rounds)||rounds<1||rounds>10||![0,1].includes(penalty)) fail('Некорректные настройки');
+        room.settings={mode,difficulty,seconds,rounds,penalty};this.resetReady(room);break;
       }
       case 'ready': lobby();d.ready=!d.ready;break;
       case 'start': {
@@ -78,7 +79,7 @@ export class Game {
         if(room.settings.mode==='pair'&&ps.length!==2) fail('Для пары нужно ровно два игрока');
         if(room.settings.mode==='teams'&&['A','B'].some(team=>ps.filter(p=>p.team===team).length<2)) fail('В каждой команде нужно хотя бы два игрока. Для двух или трёх людей выберите другой режим');
         if(room.devices.some(x=>!x.left&&(!x.ready||!x.connections))) fail('Все устройства должны подключиться и подтвердить готовность');
-        room.deck=[...WORDS]; for(let i=room.deck.length-1;i>0;i--) {const j=randomInt(i+1);[room.deck[i],room.deck[j]]=[room.deck[j],room.deck[i]];}
+        room.deck=[...WORD_SETS[room.settings.difficulty].words]; for(let i=room.deck.length-1;i>0;i--) {const j=randomInt(i+1);[room.deck[i],room.deck[j]]=[room.deck[j],room.deck[i]];}
         room.schedule=Array.from({length:room.settings.rounds},()=>ps.map(p=>p.id)).flat();room.rosterSize=ps.length;room.turn=0;room.scores={};room.history=[];room.phase='handoff';break;
       }
       case 'begin': {
