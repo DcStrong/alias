@@ -10,7 +10,7 @@ async function fixture(t){
  class Client {
   constructor(){clients.push(this);this.messages=[];}
   accept(s){this.messages.push(s);if(!this.state||s.version>=this.state.version)this.state=s;}
-  async post(path,body={}){const response=await fetch(base+path,{method:'POST',headers:{'Content-Type':'application/json',...(this.cookie?{cookie:this.cookie}:{})},body:JSON.stringify(body)});const cookie=response.headers.get('set-cookie');if(cookie)this.cookie=cookie.split(';')[0];return {status:response.status,data:await response.json()};}
+  async post(path,body={}){const response=await fetch(base+path,{method:'POST',headers:{'Content-Type':'application/json',...(this.cookie?{cookie:this.cookie}:{})},body:JSON.stringify(body)});const cookie=response.headers.get('set-cookie');if(cookie){this.lastSetCookie=cookie;this.cookie=cookie.split(';')[0];}return {status:response.status,data:await response.json()};}
   async create(){const r=await this.post('/api/rooms');assert.equal(r.status,201);this.accept(r.data);return this.state.code;}
   async join(code){this.code=code;const r=await this.post(`/api/rooms/${code}/join`);assert.equal(r.status,200,JSON.stringify(r));this.accept(r.data);}
   async connect(){this.controller=new AbortController();const response=await fetch(base+`/api/rooms/${this.state.code}/events`,{headers:{cookie:this.cookie},signal:this.controller.signal});assert.equal(response.status,200);const reader=response.body.getReader();this.reading=(async()=>{let buffer='';const decoder=new TextDecoder();try{while(true){const {done,value}=await reader.read();if(done)break;buffer+=decoder.decode(value,{stream:true});let index;while((index=buffer.indexOf('\n\n'))>=0){const event=buffer.slice(0,index);buffer=buffer.slice(index+2);if(event.startsWith('data: '))this.accept(JSON.parse(event.slice(6)));}}}catch(error){if(error.name!=='AbortError'&&!this.controller.signal.aborted)throw error;}})();await this.wait(s=>s.devices.find(d=>d.id===s.you)?.online);}
@@ -110,4 +110,14 @@ test('Собственный словарь: сотни карточек без 
  const f=await fixture(t),{a}=await prepare(f);await a.action('begin');const words=new Set();
  for(let i=0;i<500;i++){assert.equal(a.state.phase,'playing');assert.ok(a.state.card.word);assert.ok(!words.has(a.state.card.word),'Повтор слова');words.add(a.state.card.word);await a.action('card',{card:a.state.card.id,result:'skip'});}
  assert.equal(words.size,500);assert.equal(a.state.scores.pair,0);
+});
+
+test('Выход из лобби сбрасывает готовность оставшихся устройств',async t=>{
+ const f=await fixture(t),a=f.client(),b=f.client();const code=await a.create();await a.connect();await b.join(code);await b.connect();await a.wait(s=>s.devices.length===2);
+ await a.action('addPlayer',{name:'Аня'});await a.action('addPlayer',{name:'Вера'});await b.wait(s=>s.players.length===2);await b.action('addPlayer',{name:'Борис'});await a.wait(s=>s.players.length===3);await a.action('settings',{mode:'ffa',seconds:60,rounds:1,penalty:0});await b.wait(s=>s.version>=a.state.version);await b.action('ready');await a.wait(s=>s.devices.some(d=>d.id===b.state.you&&d.ready));await a.action('ready');await b.wait(s=>s.devices.every(d=>d.ready));await b.action('leave');await a.wait(s=>s.devices.length===1);assert.equal(a.state.devices[0].ready,false);await a.action('start',{},400);await a.action('ready');await a.action('start');assert.equal(a.state.phase,'handoff');
+});
+
+test('Сессионная cookie сохраняет возврат в долго открытую комнату',async t=>{
+ const f=await fixture(t),{a,code}=await prepare(f);assert.match(a.lastSetCookie,/HttpOnly/);assert.match(a.lastSetCookie,/SameSite=Strict/);assert.doesNotMatch(a.lastSetCookie,/Max-Age|Expires/i);
+ const you=a.state.you,ids=a.state.players.map(p=>p.id);await f.advance(25*60*60*1000);a.disconnect();await delay(20);await a.join(code);await a.connect();assert.equal(a.state.you,you);assert.deepEqual(a.state.players.map(p=>p.id),ids);assert.equal(a.state.phase,'handoff');await a.action('begin');assert.ok(a.state.card.word);
 });

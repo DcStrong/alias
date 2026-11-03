@@ -38,7 +38,7 @@ export class Game {
   }
   leave(room,d) {
     d.left=true; d.connections=0; room.players.filter(p=>p.device===d.id).forEach(p=>p.left=true);
-    if(room.phase==='lobby') room.players=room.players.filter(p=>!p.left);
+    if(room.phase==='lobby') {room.players=room.players.filter(p=>!p.left);this.resetReady(room);}
     else if(room.players.filter(p=>!p.left).length<2 || (room.settings.mode==='teams' && ['A','B'].some(team=>room.players.filter(p=>!p.left&&p.team===team).length<2))) { this.endTurn(room,'Недостаточно игроков для продолжения');room.phase='finished'; }
     else if(this.active(room)?.device===d.id && ['playing','handoff'].includes(room.phase)) this.endTurn(room,'Объясняющий вышел');
     if(room.host===d.id) room.host=room.devices.find(x=>!x.left&&x.connections>0)?.id || room.devices.find(x=>!x.left)?.id || null;

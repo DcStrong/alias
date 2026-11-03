@@ -22,19 +22,19 @@ export function createServer(options={}) {
    let body={};if(req.method==='POST'){let raw='';for await(const chunk of req){raw+=chunk;if(raw.length>8192){json(413,{error:'Запрос слишком большой'});return;}}body=JSON.parse(raw||'{}');}
    if(url.pathname==='/api/rooms'&&req.method==='POST') {
     if(game.rooms.size>=500)return json(503,{error:'Сервер заполнен'});
-    const room=game.create(),d=game.join(room);res.setHeader('Set-Cookie',`alias_${room.code}=${d.token}; HttpOnly; SameSite=Strict; Path=/api/rooms/${room.code}; Max-Age=86400${req.socket.encrypted?'; Secure':''}`);return json(201,game.view(room,d));
+    const room=game.create(),d=game.join(room);res.setHeader('Set-Cookie',`alias_${room.code}=${d.token}; HttpOnly; SameSite=Strict; Path=/api/rooms/${room.code}${req.socket.encrypted?'; Secure':''}`);return json(201,game.view(room,d));
    }
    const match=url.pathname.match(/^\/api\/rooms\/([A-F0-9]{6})\/(join|events|action)$/);if(!match)return json(404,{error:'Не найдено'});
    const room=game.rooms.get(match[1]);if(!room)return json(404,{error:'Комната не найдена или сервер был перезапущен'});
    const token=req.headers.cookie?.split(';').map(x=>x.trim()).find(x=>x.startsWith(`alias_${room.code}=`))?.split('=')[1];
    if(match[2]==='join'&&req.method==='POST') {
-    const d=game.join(room,token);res.setHeader('Set-Cookie',`alias_${room.code}=${d.token}; HttpOnly; SameSite=Strict; Path=/api/rooms/${room.code}; Max-Age=86400${req.socket.encrypted?'; Secure':''}`);room.version++;broadcast(room);return json(200,game.view(room,d));
+    const d=game.join(room,token);res.setHeader('Set-Cookie',`alias_${room.code}=${d.token}; HttpOnly; SameSite=Strict; Path=/api/rooms/${room.code}${req.socket.encrypted?'; Secure':''}`);room.version++;broadcast(room);return json(200,game.view(room,d));
    }
    const d=game.device(room,token);
    if(match[2]==='events'&&req.method==='GET') {
     res.writeHead(200,{'Content-Type':'text/event-stream','Cache-Control':'no-cache, no-store','Connection':'keep-alive','X-Accel-Buffering':'no'});res.write(': connected\n\n');
     streams.set(res,{room,d});d.connections++;room.version++;room.touched=game.now();broadcast(room);
-    req.on('close',()=>{streams.delete(res);d.connections=Math.max(0,d.connections-1);if(!d.connections)d.disconnectedAt=game.now();room.version++;broadcast(room);});return;
+    req.on('close',()=>{streams.delete(res);d.connections=Math.max(0,d.connections-1);if(!d.connections)d.disconnectedAt=game.now();room.touched=game.now();room.version++;broadcast(room);});return;
    }
    if(match[2]==='action'&&req.method==='POST') {if(game.tick(room))broadcast(room);game.action(room,d,body);broadcast(room);json(200,game.view(room,d));if(d.left)for(const [stream,s]of streams)if(s.d===d)stream.end();return;}
    return json(405,{error:'Метод не поддерживается'});
