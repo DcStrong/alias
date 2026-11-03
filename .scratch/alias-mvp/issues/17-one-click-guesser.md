@@ -29,4 +29,6 @@ Spec: ../spec.md (секция локальной итерации 13–18). П�
 
 Код: `375671b`. Актуальная integration branch `b0507f4` (включая 14/16) слита без конфликтов, итоговый merge `b72b760`. После merge повторно прошли `npm run check`, `git diff --check` и 9/9 целевых проверок FFA/позднего зачёта/submit-controller.
 
-Следующий шаг: перенос свежим merger на integration branch и общее Standards/Spec review.
+Интеграция: свежий merger перенёс ветку на `alias/local-room-improvements`, merge `999d75d`, без конфликтов. `npm run check` и `git diff --check` прошли; поведенческих конфликтов при сравнении diff не обнаружено.
+
+Следующий шаг: завершить 18 и провести общее Standards/Spec review.
