@@ -79,7 +79,7 @@ export class Game {
       case 'settings': {
         lobby();this.host(room,d);const {mode,seconds,rounds,penalty}=a;
         const difficulty=a.difficulty===undefined?room.settings.difficulty:a.difficulty;
-        if(!['basic','hard'].includes(difficulty)||!['pair','ffa','teams'].includes(mode)||![30,60,90,120].includes(seconds)||!Number.isInteger(rounds)||rounds<1||rounds>10||![0,1].includes(penalty)) fail('Некорректные настройки');
+        if(!['basic','medium','hard'].includes(difficulty)||!['pair','ffa','teams'].includes(mode)||![30,60,90,120].includes(seconds)||!Number.isInteger(rounds)||rounds<1||rounds>10||![0,1].includes(penalty)) fail('Некорректные настройки');
         room.settings={mode,difficulty,seconds,rounds,penalty};this.resetReady(room);break;
       }
       case 'ready': lobby();d.ready=!d.ready;break;
