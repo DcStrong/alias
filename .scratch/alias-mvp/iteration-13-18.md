@@ -19,4 +19,10 @@ Base: **f1b89e2a8cbc45e705e0678a2c7a38b16d842e12** (опубликованный
 
 ## Состояние после интеграции
 
-2026-11-03: все шесть задач 13–18 merged в integration; следующий шаг — финальные Standards/Spec review и единый fresh fixer при findings. Полный suite merger не повторял по указанию координатора: у implementer 18 после integration первый прогон 47/48, затем 48/48. Известная нестабильная прежняя проверка приватности `basic / ffa` в `test/integration.test.js:159` ищет слово через `JSON.includes(word)` по всему JSON; возможное совпадение с публичными метаданными сложности даёт ложный сбой. Передать это финальному review/fixer; в рамках merge не исправлялось. После финальных исправлений нужен общий suite. Без браузера, push/deploy и уборки worktrees на этом этапе.
+2026-11-03: все шесть задач 13–18 merged в integration; финальные Standards/Spec review и исправление завершены (подробности ниже). Полный suite merger не повторял по указанию координатора: у implementer 18 после integration первый прогон 47/48, затем 48/48. Известная нестабильная прежняя проверка приватности `basic / ffa` в `test/integration.test.js:159` ищет слово через `JSON.includes(word)` по всему JSON; возможное совпадение с публичными метаданными сложности даёт ложный сбой. Передать это финальному review/fixer; в рамках merge не исправлялось. После финальных исправлений нужен общий suite. Без браузера, push/deploy и уборки worktrees на этом этапе.
+
+## Финальное review и исправление — завершены
+
+2026-11-03: Standards review — 1 P2, Spec review — 0 findings; единственное замечание исправлено в `14469470d8996d33c42c8b85aa7ece6c30e2b19f` (`alias/review-fixes`). Исправление влито без конфликтов: merge `15ff74c324449a1f6a4968f5a84d19f5acfa61ae`. Production-код не менялся. Доказательства fresh fixer: полный suite **49/49**, `npm run check`, `node --check deploy/smoke.mjs` и `git diff --check` прошли; regression тест подтверждает допустимость подстрок метаданных и обнаружение настоящей утечки. Merger выполнил только `git diff --check`, без повторного suite. Подробнее: [review и исправление](iteration-13-18-review.md).
+
+Следующий шаг — coordinator убирает временные worktrees; ручная браузерная приёмка остаётся пользователю. Без push/deploy.
