@@ -11,8 +11,12 @@ Base: **f1b89e2a8cbc45e705e0678a2c7a38b16d842e12** (опубликованный
 | [15](issues/15-select-spacing.md) | Нет | alias/ticket-15 | merged: 3a26df6; код 844be59; статический CSS-разбор, diff --check, check и 26/26 тестов у implementer; merge без конфликтов, diff --check у merger |
 | [16](issues/16-team-order.md) | Нет | alias/ticket-16 | merged: f1fb9ad; код db369d6; check, diff --check и 40/40 тестов у implementer (включая 13/14/15); merge без конфликтов, diff --check и check у merger |
 | [17](issues/17-one-click-guesser.md) | 13 | alias/ticket-17 | merged: 999d75d; код 375671b; 34/34 теста до 14/16 и 9/9 целевых после b0507f4 у implementer; merge без конфликтов, diff --check и check у merger |
-| [18](issues/18-end-game-to-lobby.md) | 13, 16 | alias/ticket-18 | в-работе, implement_ticket18; 13 и 16 merged |
+| [18](issues/18-end-game-to-lobby.md) | 13, 16 | alias/ticket-18 | merged: 67be055; код a15d8f1, готовая ветка a0bfdca; 6/6 целевых тестов, check и diff --check у implementer; merge без конфликтов, diff --check и check у merger |
 
 13 задаёт поздний endpoint/состояние, которые использует 17. 18 должен очищать состояние 13 и сохранять реализованный в 16 порядок. Остальные задачи независимы по поведению; пересечение файлов разрешает merger, не фиктивные зависимости.
 
 Исполнение: fresh implementer/worktree на тикет, tdd на HTTP/SSE и уместных чистых границах; каждый перед завершением сливает актуальную integration branch в свою ветку. Fresh merger переносит готовое на integration. Статусы здесь и в тикетах обновляются с commit/test evidence. Финальные Standards/Spec review, единый fresh fixer при findings, полный suite, затем archive worktrees. Без PR, push или deploy. Ручная браузерная приёмка остаётся пользователю. CSS-тикет не требует бессмысленных тестов, зеркалящих декларации; статический разбор и общий suite.
+
+## Состояние после интеграции
+
+2026-11-03: все шесть задач 13–18 merged в integration; следующий шаг — финальные Standards/Spec review и единый fresh fixer при findings. Полный suite merger не повторял по указанию координатора: у implementer 18 после integration первый прогон 47/48, затем 48/48. Известная нестабильная прежняя проверка приватности `basic / ffa` в `test/integration.test.js:159` ищет слово через `JSON.includes(word)` по всему JSON; возможное совпадение с публичными метаданными сложности даёт ложный сбой. Передать это финальному review/fixer; в рамках merge не исправлялось. После финальных исправлений нужен общий suite. Без браузера, push/deploy и уборки worktrees на этом этапе.
