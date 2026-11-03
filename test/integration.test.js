@@ -183,3 +183,45 @@ test('Последнее слово после таймера доступно �
  await b.wait(s=>s.phase==='handoff');await b.action('begin');const last=b.state.card;await f.advance(60000);await a.wait(s=>s.phase==='summary');await b.wait(s=>s.phase==='summary');await a.action('next');await b.wait(s=>s.phase==='finished');assert.equal(b.state.lastCard.word,last.word);assert.equal(a.state.lastCard,null);assert.equal(b.state.deadline,null);assert.deepEqual(b.state.scores,{});
  await a.action('restart');await b.wait(s=>s.phase==='lobby');assert.equal(b.state.lastCard,null);assert.equal(b.state.lastCompleted,null);
 });
+
+
+test('Команды: предварительная очередь чередует команды и даёт каждому один ход за круг',async t=>{
+ const f=await fixture(t),a=f.client();await a.create();await a.connect();
+ for(const [name,team] of [['Аня','A'],['Вера','A'],['Даша','A'],['Борис','B'],['Глеб','B']])await a.action('addPlayer',{name,team});
+ await a.action('settings',{mode:'teams',seconds:30,rounds:2,penalty:0});
+ const ids=Object.fromEntries(a.state.players.map(p=>[p.name,p.id]));
+ const expected=['Аня','Борис','Вера','Глеб','Даша'].map(name=>ids[name]);
+ assert.deepEqual(a.state.turnOrder,expected);
+ await a.action('ready');await a.action('start');assert.equal(a.state.turnCount,10);
+ for(const id of [...expected,...expected]){
+  assert.equal(a.state.active,id);assert.deepEqual(a.state.turnOrder,expected);
+  await a.action('begin');await f.advance(30000);await a.wait(s=>s.phase==='summary');await a.action('next');
+ }
+ assert.equal(a.state.phase,'finished');
+});
+
+
+test('Команды: только ведущий меняет порядок в лобби, синхронизация и сброс готовности',async t=>{
+ const f=await fixture(t),a=f.client(),b=f.client();const code=await a.create();await a.connect();await b.join(code);await b.connect();await a.wait(s=>s.devices.every(d=>d.online));
+ for(const [name,team] of [['Аня','A'],['Вера','A'],['Борис','B'],['Глеб','B'],['Даша','B']])await a.action('addPlayer',{name,team});
+ const [anya,vera,boris,gleb,dasha]=a.state.players,original=a.state.players.map(p=>({...p}));
+ await a.action('movePlayer',{player:vera.id,direction:'up'},400);
+ await a.action('settings',{mode:'teams',seconds:30,rounds:1,penalty:0});
+ await b.wait(s=>s.version===a.state.version);await b.action('ready');await a.wait(s=>s.devices.some(d=>d.ready));await a.action('ready');
+ await b.wait(s=>s.version===a.state.version);await b.action('movePlayer',{player:vera.id,direction:'up'},400);
+ for(const data of [{player:anya.id,direction:'up'},{player:dasha.id,direction:'down'},{player:vera.id,direction:'sideways'},{player:'missing',direction:'up'}])await a.action('movePlayer',data,400);
+ assert.ok(a.state.devices.every(d=>d.ready));
+ await a.action('movePlayer',{player:vera.id,direction:'up'});
+ const expected=[vera.id,boris.id,anya.id,gleb.id,dasha.id];assert.deepEqual(a.state.turnOrder,expected);assert.ok(a.state.devices.every(d=>!d.ready));
+ await b.wait(s=>s.version===a.state.version);assert.deepEqual(b.state.turnOrder,expected);
+ assert.deepEqual(a.state.players.map(p=>p.id),[vera.id,anya.id,boris.id,gleb.id,dasha.id]);
+ for(const p of a.state.players)assert.deepEqual(p,original.find(x=>x.id===p.id));assert.equal(a.state.devices.length,2);
+ await a.action('movePlayer',{player:boris.id,direction:'down'});assert.deepEqual(a.state.turnOrder,[vera.id,gleb.id,anya.id,boris.id,dasha.id]);
+ await b.wait(s=>s.version===a.state.version);await b.action('ready');await a.wait(s=>s.devices.some(d=>d.ready));await a.action('ready');await a.action('start');
+ for(const phase of ['handoff','playing','summary','finished']){
+  if(phase==='playing')await a.action('begin');
+  if(phase==='summary'){await f.advance(30000);await a.wait(s=>s.phase==='summary');}
+  if(phase==='finished'){while(a.state.phase!=='finished'){await a.action('next');if(a.state.phase==='finished')break;await a.action('begin');await f.advance(30000);await a.wait(s=>s.phase==='summary');}}
+  assert.equal(a.state.phase,phase);await a.action('movePlayer',{player:anya.id,direction:'up'},400);
+ }
+});
