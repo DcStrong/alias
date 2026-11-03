@@ -15,13 +15,19 @@ export class Game {
     if(!room.host) room.host=d.id; return d;
   }
   host(room,d) { if(room.host!==d.id) fail('Это действие доступно ведущему'); }
+  turnOrder(room) {
+    if(room.phase!=='lobby'&&room.schedule) return room.schedule.slice(0,room.rosterSize);
+    if(room.settings.mode!=='teams') return room.players.map(p=>p.id);
+    const a=room.players.filter(p=>p.team==='A'),b=room.players.filter(p=>p.team==='B');
+    return Array.from({length:Math.max(a.length,b.length)},(_,i)=>[a[i]?.id,b[i]?.id]).flat().filter(Boolean);
+  }
   active(room) { return room.players.find(p=>p.id===room.schedule?.[room.turn]); }
   connected(room,p) { return room.devices.some(d=>d.id===p.device && !d.left && d.connections>0); }
   view(room,d) {
     const active=this.active(room);
     return {code:room.code,version:room.version,phase:room.phase,host:room.host,you:d.id,settings:room.settings,difficulties:DIFFICULTIES,
       players:room.players.map(p=>({...p,online:this.connected(room,p)})), devices:room.devices.filter(x=>!x.left).map(x=>({id:x.id,ready:x.ready,online:x.connections>0})),
-      active:active?.id,turn:room.turn,turnCount:room.schedule?.length,round:room.schedule?Math.floor(room.turn/room.rosterSize)+1:0,
+      turnOrder:this.turnOrder(room),active:active?.id,turn:room.turn,turnCount:room.schedule?.length,round:room.schedule?Math.floor(room.turn/room.rosterSize)+1:0,
       deadline:room.deadline,serverNow:this.now(),card:room.phase==='playing' && active?.device===d.id?{id:room.cardId,word:room.word}:null,
       lastCompleted:['playing','summary','finished'].includes(room.phase)?room.lastCompleted??null:null,
       lastCard:['summary','finished'].includes(room.phase)&&room.lastCard?.device===d.id?{id:room.lastCard.id,word:room.lastCard.word,result:room.lastCard.result,claimable:room.lastCard.claimable,explainer:room.lastCard.explainer}:null,
@@ -76,6 +82,15 @@ export class Game {
       }
       case 'removePlayer': {lobby(); const p=room.players.find(p=>p.id===a.player); if(!p) fail('Игрок не найден');if(p.device!==d.id) this.host(room,d); room.players=room.players.filter(x=>x!==p);this.resetReady(room);break;}
       case 'team': {lobby();const p=room.players.find(p=>p.id===a.player);if(!p) fail('Игрок не найден');if(p.device!==d.id)this.host(room,d);p.team=a.team==='B'?'B':'A';this.resetReady(room);break;}
+      case 'movePlayer': {
+        lobby();this.host(room,d);if(room.settings.mode!=='teams') fail('Порядок команды доступен только в командном режиме');
+        if(!['up','down'].includes(a.direction)) fail('Неизвестное направление');
+        const p=room.players.find(p=>p.id===a.player);if(!p) fail('Игрок не найден');
+        const team=room.players.filter(x=>x.team===p.team),index=team.indexOf(p),other=team[index+(a.direction==='up'?-1:1)];
+        if(!other) fail('Игрок уже на краю команды');
+        const from=room.players.indexOf(p),to=room.players.indexOf(other);
+        [room.players[from],room.players[to]]=[room.players[to],room.players[from]];this.resetReady(room);break;
+      }
       case 'settings': {
         lobby();this.host(room,d);const {mode,seconds,rounds,penalty}=a;
         const difficulty=a.difficulty===undefined?room.settings.difficulty:a.difficulty;
@@ -90,7 +105,7 @@ export class Game {
         if(room.settings.mode==='teams'&&['A','B'].some(team=>ps.filter(p=>p.team===team).length<2)) fail('В каждой команде нужно хотя бы два игрока. Для двух или трёх людей выберите другой режим');
         if(room.devices.some(x=>!x.left&&(!x.ready||!x.connections))) fail('Все устройства должны подключиться и подтвердить готовность');
         room.deck=[...WORD_SETS[room.settings.difficulty].words]; for(let i=room.deck.length-1;i>0;i--) {const j=randomInt(i+1);[room.deck[i],room.deck[j]]=[room.deck[j],room.deck[i]];}
-        room.schedule=Array.from({length:room.settings.rounds},()=>ps.map(p=>p.id)).flat();room.rosterSize=ps.length;room.turn=0;room.scores={};room.history=[];room.lastCard=null;room.lastCompleted=null;room.phase='handoff';break;
+        room.schedule=Array.from({length:room.settings.rounds},()=>this.turnOrder(room)).flat();room.rosterSize=ps.length;room.turn=0;room.scores={};room.history=[];room.lastCard=null;room.lastCompleted=null;room.phase='handoff';break;
       }
       case 'begin': {
         if(room.phase!=='handoff'||this.active(room)?.device!==d.id) fail('Только устройство объясняющего может начать ход');
