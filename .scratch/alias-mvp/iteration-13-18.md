@@ -9,9 +9,9 @@ Base: **f1b89e2a8cbc45e705e0678a2c7a38b16d842e12** (опубликованный
 | [13](issues/13-award-last-word.md) | Нет | alias/ticket-13 | merged: af45988; код 647f2c8; check, diff --check и 32/32 теста у implementer; merge без конфликтов, diff --check и check у merger |
 | [14](issues/14-medium-difficulty.md) | Нет | alias/ticket-14 | merged: aa64cf6; код 4f487ac; 389 карточек / 196 словосочетаний; check, diff --check и 38/38 тестов у implementer (включая 13/15); merge без конфликтов, diff --check и check у merger |
 | [15](issues/15-select-spacing.md) | Нет | alias/ticket-15 | merged: 3a26df6; код 844be59; статический CSS-разбор, diff --check, check и 26/26 тестов у implementer; merge без конфликтов, diff --check у merger |
-| [16](issues/16-team-order.md) | Нет | alias/ticket-16 | в-работе, implement_ticket16 |
+| [16](issues/16-team-order.md) | Нет | alias/ticket-16 | merged: f1fb9ad; код db369d6; check, diff --check и 40/40 тестов у implementer (включая 13/14/15); merge без конфликтов, diff --check и check у merger |
 | [17](issues/17-one-click-guesser.md) | 13 | alias/ticket-17 | в-работе, implement_ticket17; 13 merged |
-| [18](issues/18-end-game-to-lobby.md) | 13, 16 | alias/ticket-18 | заблокирована 16; 13 merged |
+| [18](issues/18-end-game-to-lobby.md) | 13, 16 | alias/ticket-18 | разблокирована: 13 и 16 merged; готова к реализации |
 
 13 задаёт поздний endpoint/состояние, которые использует 17. 18 должен очищать состояние 13 и сохранять реализованный в 16 порядок. Остальные задачи независимы по поведению; пересечение файлов разрешает merger, не фиктивные зависимости.
 
