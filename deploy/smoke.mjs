@@ -23,6 +23,15 @@ class Client {
  }
  async wait(predicate,timeout=15000){const until=Date.now()+timeout;while(Date.now()<until){if(this.state&&predicate(this.state))return;await delay(50);}throw Error('Ожидание публичного состояния истекло');}
  async action(type,data={},expected=200){const r=await this.post(`/api/rooms/${this.state.code}/action`,{type,version:this.state.version,...data});assert.equal(r.status,expected,JSON.stringify(r.data));if(expected===200)this.accept(r.data);return r.data;}
+ async leave(){
+  // Closing a peer SSE stream may advance the version after its leave response.
+  for(let attempt=0;attempt<8;attempt++){
+   const response=await this.post(`/api/rooms/${this.state.code}/action`,{type:'leave',version:this.state.version});
+   if(response.status===200){this.accept(response.data);return;}
+   assert.equal(response.status,400);assert.match(response.data.error,/Состояние уже изменилось/);await delay(100);
+  }
+  throw Error('Не удалось очистить тестового участника после обновлений присутствия');
+ }
  disconnect(){this.controller?.abort();}
 }
 try {
@@ -44,5 +53,5 @@ try {
  await a.wait(s=>s.phase==='summary',40000);await a.action('next');await b.wait(s=>s.phase==='finished');assert.equal(a.state.phase,'finished');assert.equal(a.state.scores.pair,2);assert.equal(a.state.turnCount,2);
  console.log('PASS: публичная партия из 2 полных ходов завершена, общий счёт 2.');
  }
- await b.action('leave');await a.wait(s=>s.devices.length===1);await a.action('leave');
+ await b.leave();await a.wait(s=>s.devices.length===1);await a.leave();
 } finally {clients.forEach(c=>c.disconnect());await Promise.allSettled(clients.map(c=>c.reading));}

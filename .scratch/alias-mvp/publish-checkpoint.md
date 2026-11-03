@@ -2,6 +2,8 @@
 
 Дата: 2026-11-03, Europe/Moscow.
 
+**Исторический checkpoint: публикация возобновлена пользователем и завершена.** Итоговый runtime commit 5a44917b12fafc6599456471b71c7bf16eb63ab5, release /opt/alias/releases/5a44917b12fafc6599456471b71c7bf16eb63ab5. Данные ниже описывают прошлую остановку, не текущий незавершённый этап. Актуальный результат — map.md и card-flow-verification.md.
+
 ## Причина остановки
 
 Первая проверка mcp__codex_app__get_usage_limits в этой итерации: rateLimitsByLimitId.codex primary usedPercent=92 (осталось **8%**), secondary usedPercent=24 (осталось **76%**). Пользователь прямо попросил останавливаться при остатке <=10% любого окна. Сбросы/кредиты не использовались.
