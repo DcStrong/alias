@@ -41,10 +41,10 @@ test('Локальная пара: передача, штраф, полные к
   await a.action('card',{card:a.state.card.id,result:'guess'});
   if(turn===0)await a.action('card',{card:a.state.card.id,result:'skip'});
   await f.advance(60000);await a.wait(s=>s.phase==='summary');assert.equal(a.state.card,null);
-  assert.equal(a.state.history[0].word,word);await a.action('next');
+  assert.equal(a.state.history[0].word,word);await a.action('next',{discardLast:true});
  }
  assert.equal(a.state.phase,'finished');assert.equal(a.state.scores.pair,3);
- await a.action('restart');assert.equal(a.state.phase,'lobby');assert.deepEqual(a.state.scores,{});assert.equal(a.state.players.length,2);assert.ok(a.state.devices.every(d=>!d.ready));
+ await a.action('restart',{discardLast:true});assert.equal(a.state.phase,'lobby');assert.deepEqual(a.state.scores,{});assert.equal(a.state.players.length,2);assert.ok(a.state.devices.every(d=>!d.ready));
 });
 
 test('Два клиента: скрытая карточка, права, повтор команды и reconnect',async t=>{
@@ -59,7 +59,7 @@ test('Два клиента: скрытая карточка, права, пов
  a.disconnect();await b.wait(s=>!s.devices.find(d=>d.id===a.state.you).online);
  await a.join(code);await a.connect();assert.equal(a.state.card.word,word);assert.equal(a.state.deadline,deadline);assert.deepEqual(a.state.players,players);
  await b.wait(s=>s.devices.every(d=>d.online));assert.equal(b.state.card,null);
- await f.advance(60000);await a.wait(s=>s.phase==='summary');await a.action('next');await b.wait(s=>s.phase==='handoff');await b.action('begin');await a.wait(s=>s.phase==='playing');assert.equal(a.state.card,null);assert.ok(b.state.card.word);
+ await f.advance(60000);await a.wait(s=>s.phase==='summary');await a.action('next',{discardLast:true});await b.wait(s=>s.phase==='handoff');await b.action('begin');await a.wait(s=>s.phase==='playing');assert.equal(a.state.card,null);assert.ok(b.state.card.word);
 });
 
 test('Каждый за себя: три игрока, выбор угадавшего, очки и штрафы',async t=>{
@@ -69,12 +69,12 @@ test('Каждый за себя: три игрока, выбор угадавш
  await a.action('card',{card:a.state.card.id,result:'guess',winner:p1.id},400);
  await a.action('card',{card:a.state.card.id,result:'guess',winner:p3.id});assert.equal(a.state.scores[p1.id],1);assert.equal(a.state.scores[p3.id],1);
  await a.action('card',{card:a.state.card.id,result:'violation'});assert.equal(a.state.scores[p1.id],0);
- await f.advance(60000);await a.wait(s=>s.phase==='summary');await a.action('next');await b.wait(s=>s.active===p2.id);await b.action('begin');await f.advance(60000);await a.wait(s=>s.phase==='summary');await a.action('next');assert.equal(a.state.active,p3.id);await a.action('begin');await f.advance(60000);await a.wait(s=>s.phase==='summary');await a.action('next');assert.equal(a.state.phase,'finished');assert.equal(a.state.turnCount,3);
+ await f.advance(60000);await a.wait(s=>s.phase==='summary');await a.action('next',{discardLast:true});await b.wait(s=>s.active===p2.id);await b.action('begin');await f.advance(60000);await a.wait(s=>s.phase==='summary');await a.action('next',{discardLast:true});assert.equal(a.state.active,p3.id);await a.action('begin');await f.advance(60000);await a.wait(s=>s.phase==='summary');await a.action('next',{discardLast:true});assert.equal(a.state.phase,'finished');assert.equal(a.state.turnCount,3);
 });
 
 test('Команды: очки, пропуск и завершение по кругу',async t=>{
  const f=await fixture(t),{a}=await prepare(f,{mode:'teams',penalty:1,names:['Аня','Борис','Вера','Глеб']});
- for(let i=0;i<4;i++){await a.action('begin');await a.action('card',{card:a.state.card.id,result:'guess'});if(i===0)await a.action('card',{card:a.state.card.id,result:'skip'});await f.advance(60000);await a.wait(s=>s.phase==='summary');await a.action('next');}
+ for(let i=0;i<4;i++){await a.action('begin');await a.action('card',{card:a.state.card.id,result:'guess'});if(i===0)await a.action('card',{card:a.state.card.id,result:'skip'});await f.advance(60000);await a.wait(s=>s.phase==='summary');await a.action('next',{discardLast:true});}
  assert.equal(a.state.phase,'finished');assert.deepEqual(a.state.scores,{A:1,B:2});
 });
 
@@ -91,12 +91,12 @@ test('Отключённое устройство исключается вед�
 test('Ведущий меняется после разрыва; отсутствующий ход можно завершить',async t=>{
  const f=await fixture(t),{a,b,code}=await prepare(f,{online:true,mode:'ffa',names:['Аня','Борис','Вера']});await a.action('begin');const deadline=a.state.deadline;
  a.disconnect();await b.wait(s=>!s.devices.find(d=>d.id===a.state.you).online);await b.action('recover',{},400);await f.advance(15000);await b.wait(s=>s.host===s.you);assert.equal(b.state.deadline,deadline);
- await b.action('recover');assert.equal(b.state.phase,'summary');await a.join(code);await a.connect();assert.notEqual(a.state.host,a.state.you);await a.action('next',{},400);await b.wait(s=>s.devices.every(d=>d.online));await b.action('next');assert.equal(b.state.active,b.state.players[1].id);await b.action('begin');
- await b.action('leave');await a.wait(s=>s.host===s.you&&s.phase==='summary');await a.action('next');assert.equal(a.state.active,a.state.players[2].id);
+ await b.action('recover');assert.equal(b.state.phase,'summary');await a.join(code);await a.connect();assert.notEqual(a.state.host,a.state.you);await a.action('next',{},400);await b.wait(s=>s.devices.every(d=>d.online));await b.action('next',{discardLast:true});assert.equal(b.state.active,b.state.players[1].id);await b.action('begin');
+ await b.action('leave');await a.wait(s=>s.host===s.you&&s.phase==='summary');await a.action('next',{discardLast:true});assert.equal(a.state.active,a.state.players[2].id);
 });
 
 test('Явный выход ведущего завершает пару и даёт второму новую игру',async t=>{
- const f=await fixture(t),{a,b}=await prepare(f,{online:true});await a.action('begin');await b.wait(s=>s.phase==='playing');await a.action('leave');await b.wait(s=>s.host===s.you&&s.phase==='finished');assert.match(b.state.reason,/Недостаточно/);await b.action('restart');assert.equal(b.state.players.length,1);assert.equal(b.state.phase,'lobby');await b.action('addPlayer',{name:'Вера'});await b.action('ready');await b.action('start');assert.equal(b.state.phase,'handoff');
+ const f=await fixture(t),{a,b}=await prepare(f,{online:true});await a.action('begin');await b.wait(s=>s.phase==='playing');await a.action('leave');await b.wait(s=>s.host===s.you&&s.phase==='finished');assert.match(b.state.reason,/Недостаточно/);await b.action('restart',{discardLast:true});assert.equal(b.state.players.length,1);assert.equal(b.state.phase,'lobby');await b.action('addPlayer',{name:'Вера'});await b.action('ready');await b.action('start');assert.equal(b.state.phase,'handoff');
 });
 
 test('Граница таймера, недопустимые запросы и защита лобби',async t=>{
@@ -146,7 +146,7 @@ for(const [difficulty,entries] of [['basic',WORDS],['hard',HARD_WORDS]]) {
   }
   assert.equal(seen.size,entries.length);assert.equal(a.state.phase,'finished');assert.equal(a.state.card,null);assert.equal(a.state.reason,'Словарь закончился');
   if(difficulty==='hard')assert.ok([...seen].some(word=>word.includes(' ')),'В игре нет словосочетаний');
-  await a.action('restart');assert.equal(a.state.settings.difficulty,difficulty);assert.equal(a.state.phase,'lobby');
+  await a.action('restart',{discardLast:true});assert.equal(a.state.settings.difficulty,difficulty);assert.equal(a.state.phase,'lobby');
   const other=difficulty==='basic'?'hard':'basic';await a.action('settings',{mode:'pair',difficulty:other,seconds:60,rounds:1,penalty:0});await a.action('ready');await a.action('start');await a.action('begin');assert.ok((other==='hard'?HARD_WORDS:WORDS).includes(a.state.card.word));
  });
 }
@@ -161,9 +161,9 @@ for(const difficulty of ['basic','hard'])for(const mode of ['pair','ffa','teams'
   const key=mode==='pair'?'pair':mode==='teams'?'A':a.state.players[0].id;assert.equal(a.state.scores[key],1);if(mode==='ffa')assert.equal(a.state.scores[a.state.players[1].id],1);
   await a.action('card',{card:a.state.card.id,result:'skip'});assert.equal(a.state.scores[key],0);
   const deadline=a.state.deadline, card=a.state.card;a.disconnect();await b.wait(s=>!s.devices.find(d=>d.id===a.state.you).online);await a.join(code);await a.connect();assert.equal(a.state.settings.difficulty,difficulty);assert.deepEqual(a.state.card,card);assert.equal(a.state.deadline,deadline);
-  await f.advance(60000);await a.wait(s=>s.phase==='summary');await a.action('next');await b.wait(s=>s.phase==='handoff');assert.equal(b.state.card,null);await b.action('begin');await a.wait(s=>s.phase==='playing');assert.equal(a.state.card,null);assert.ok((difficulty==='hard'?HARD_WORDS:WORDS).includes(b.state.card.word));
-  await f.advance(60000);await a.wait(s=>s.phase==='summary');await a.action('next');
-  for(let turn=2;turn<names.length;turn++){assert.equal(a.state.phase,'handoff');await a.action('begin');await f.advance(60000);await a.wait(s=>s.phase==='summary');await a.action('next');}
+  await f.advance(60000);await a.wait(s=>s.phase==='summary');await a.action('next',{discardLast:true});await b.wait(s=>s.phase==='handoff');assert.equal(b.state.card,null);await b.action('begin');await a.wait(s=>s.phase==='playing');assert.equal(a.state.card,null);assert.ok((difficulty==='hard'?HARD_WORDS:WORDS).includes(b.state.card.word));
+  await f.advance(60000);await a.wait(s=>s.phase==='summary');await a.action('next',{discardLast:true});
+  for(let turn=2;turn<names.length;turn++){assert.equal(a.state.phase,'handoff');await a.action('begin');await f.advance(60000);await a.wait(s=>s.phase==='summary');await a.action('next',{discardLast:true});}
   assert.equal(a.state.phase,'finished');assert.equal(a.state.turnCount,names.length);assert.equal(a.state.settings.difficulty,difficulty);
  });
 }
@@ -176,12 +176,64 @@ test('Завершённая карточка раскрывается, след
  await a.action('card',{card:third.id,result:'violation'});await b.wait(s=>s.version>=a.state.version);assert.equal(b.state.lastCompleted.word,second.word);assert.ok(!JSON.stringify(b.state).includes(third.word));assert.ok(!JSON.stringify(b.state).includes(a.state.card.word));
 });
 
-test('Последнее слово после таймера доступно объясняющему, сохраняется в итогах партии и не засчитывается',async t=>{
+test('Последнее слово приватно в итогах; обычная card-команда после таймера запрещена',async t=>{
  const f=await fixture(t),{a,b,code}=await prepare(f,{online:true});await a.action('begin');const first=a.state.card;await f.advance(60000);await a.wait(s=>s.phase==='summary');await b.wait(s=>s.phase==='summary');
  assert.equal(a.state.card,null);assert.equal(a.state.lastCard.word,first.word);assert.equal(a.state.lastCard.result,'unplayed');assert.equal(b.state.lastCard,null);assert.ok(!JSON.stringify(b.state).includes(first.word));
- await a.action('card',{card:first.id,result:'guess'},400);assert.deepEqual(a.state.scores,{});await a.join(code);assert.equal(a.state.lastCard.word,first.word);await a.action('next');assert.equal(a.state.phase,'handoff');assert.equal(a.state.lastCard,null);assert.equal(a.state.lastCompleted,null);
- await b.wait(s=>s.phase==='handoff');await b.action('begin');const last=b.state.card;await f.advance(60000);await a.wait(s=>s.phase==='summary');await b.wait(s=>s.phase==='summary');await a.action('next');await b.wait(s=>s.phase==='finished');assert.equal(b.state.lastCard.word,last.word);assert.equal(a.state.lastCard,null);assert.equal(b.state.deadline,null);assert.deepEqual(b.state.scores,{});
- await a.action('restart');await b.wait(s=>s.phase==='lobby');assert.equal(b.state.lastCard,null);assert.equal(b.state.lastCompleted,null);
+ await a.action('card',{card:first.id,result:'guess'},400);assert.deepEqual(a.state.scores,{});await a.join(code);assert.equal(a.state.lastCard.word,first.word);await a.action('next',{discardLast:true});assert.equal(a.state.phase,'handoff');assert.equal(a.state.lastCard,null);assert.equal(a.state.lastCompleted,null);
+ await b.wait(s=>s.phase==='handoff');await b.action('begin');const last=b.state.card;await f.advance(60000);await a.wait(s=>s.phase==='summary');await b.wait(s=>s.phase==='summary');await a.action('next',{discardLast:true});await b.wait(s=>s.phase==='finished');assert.equal(b.state.lastCard.word,last.word);assert.equal(a.state.lastCard,null);assert.equal(b.state.deadline,null);assert.deepEqual(b.state.scores,{});
+ await a.action('restart',{discardLast:true});await b.wait(s=>s.phase==='lobby');assert.equal(b.state.lastCard,null);assert.equal(b.state.lastCompleted,null);
+});
+
+test('Поздний зачёт пары: приватность, reconnect, права, ID и однократное начисление через SSE',async t=>{
+ const f=await fixture(t),{a,b,code}=await prepare(f,{online:true});await a.action('begin');const card=a.state.card;
+ await a.action('awardLast',{card:card.id},400);
+ await f.advance(60000);await a.wait(s=>s.phase==='summary');await b.wait(s=>s.phase==='summary');
+ assert.equal(a.state.lastCard.id,card.id);assert.equal(a.state.lastCard.claimable,true);assert.equal(b.state.pendingLast,true);assert.equal(b.state.lastCard,null);assert.ok(!JSON.stringify(b.state).includes(card.word));
+ await a.join(code);await b.wait(s=>s.version>=a.state.version);assert.equal(a.state.lastCard.id,card.id);
+ await b.action('awardLast',{card:card.id},400);await a.action('awardLast',{card:'wrong'},400);await a.action('card',{card:card.id,result:'guess'},400);
+ const version=a.state.version;
+ const results=await Promise.all([1,2].map(()=>a.post(`/api/rooms/${code}/action`,{type:'awardLast',card:card.id,version})));
+ assert.deepEqual(results.map(r=>r.status).sort(),[200,400]);await a.wait(s=>s.scores.pair===1);await b.wait(s=>s.scores.pair===1);
+ assert.equal(a.state.lastCard.claimable,false);assert.equal(b.state.pendingLast,false);assert.equal(b.state.lastCompleted.word,card.word);assert.equal(b.state.history.at(-1).result,'guess');assert.equal(a.state.card,null);assert.equal(a.state.deadline,null);
+ await a.action('awardLast',{card:card.id},400);assert.equal(a.state.scores.pair,1);
+});
+
+test('Поздний зачёт: ведущий явно отказывается от карточки; итог партии сохраняет право и объясняющего',async t=>{
+ const f=await fixture(t),{a,b,code}=await prepare(f,{online:true,mode:'ffa',names:['Аня','Борис','Вера']});const [p1,p2,p3]=a.state.players;
+ await a.action('begin');const first=a.state.card;await f.advance(60000);await a.wait(s=>s.phase==='summary');
+ await a.action('next',{},400);assert.equal(a.state.pendingLast,true);
+ await a.action('next',{discardLast:true});await a.action('awardLast',{card:first.id,winner:p2.id},400);
+ await b.wait(s=>s.phase==='handoff');await b.action('begin');await f.advance(60000);await a.wait(s=>s.phase==='summary');await a.action('next',{discardLast:true});
+ await a.action('begin');const last=a.state.card;await f.advance(60000);await a.wait(s=>s.phase==='summary');await a.action('next');assert.equal(a.state.phase,'finished');assert.equal(a.state.pendingLast,true);assert.equal(a.state.active,undefined);
+ await a.action('restart',{},400);await a.join(code);assert.equal(a.state.lastCard.id,last.id);
+ await a.action('awardLast',{card:last.id,winner:p3.id},400);await a.action('awardLast',{card:last.id},400);
+ await a.action('awardLast',{card:last.id,winner:p1.id});assert.deepEqual(a.state.scores,{[p3.id]:1,[p1.id]:1});assert.equal(a.state.phase,'finished');assert.equal(a.state.deadline,null);assert.equal(a.state.card,null);
+ await b.wait(s=>s.scores[p3.id]===1);assert.equal(b.state.lastCompleted.word,last.word);await a.action('restart');assert.equal(a.state.pendingLast,false);assert.equal(a.state.lastCard,null);
+});
+
+for(const mode of ['ffa','teams'])test(`Поздний зачёт ${mode}: очки режима без нового слова и таймера`,async t=>{
+ const f=await fixture(t),{a}=await prepare(f,{mode,names:mode==='ffa'?['Аня','Борис','Вера']:['Аня','Борис','Вера','Глеб']});
+ const [p1,p2]=a.state.players;await a.action('begin');const card=a.state.card;await f.advance(60000);await a.wait(s=>s.phase==='summary');
+ await a.action('awardLast',{card:card.id,winner:p2.id});assert.deepEqual(a.state.scores,mode==='ffa'?{[p1.id]:1,[p2.id]:1}:{A:1});assert.equal(a.state.card,null);assert.equal(a.state.deadline,null);assert.equal(a.state.phase,'summary');assert.equal(a.state.history.length,1);
+});
+
+test('Поздний зачёт и отказ ведущего конкурируют атомарно; отключённый объясняющий не блокирует партию',async t=>{
+ const f=await fixture(t),{a,b,code}=await prepare(f,{online:true});
+ await a.action('begin');await f.advance(60000);await a.wait(s=>s.phase==='summary');await a.action('next',{discardLast:true});await b.wait(s=>s.phase==='handoff');await b.action('begin');const card=b.state.card;
+ await f.advance(60000);await a.wait(s=>s.phase==='summary');await b.wait(s=>s.phase==='summary');await a.action('next');await b.wait(s=>s.phase==='finished');
+ const version=a.state.version;
+ const [award,restart]=await Promise.all([b.post(`/api/rooms/${code}/action`,{type:'awardLast',card:card.id,version}),a.post(`/api/rooms/${code}/action`,{type:'restart',discardLast:true,version})]);
+ assert.deepEqual([award.status,restart.status].sort(),[200,400]);
+ if(award.status===200){await a.wait(s=>s.scores.pair===1);assert.equal(a.state.phase,'finished');await a.action('restart');}
+ else {await b.wait(s=>s.phase==='lobby');assert.deepEqual(b.state.scores,{});await b.action('awardLast',{card:card.id},400);}
+ assert.equal(a.state.phase,'lobby');assert.equal(a.state.lastCard,null);
+ // Another game: the host can explicitly close an absent explainer's pending card.
+ await b.wait(s=>s.phase==='lobby');await b.action('ready');await a.wait(s=>s.devices.find(d=>d.id===b.state.you).ready);await a.action('ready');await a.action('start');await a.action('begin');await f.advance(60000);await a.wait(s=>s.phase==='summary');
+ a.disconnect();await b.wait(s=>!s.devices.find(d=>d.id===a.state.you).online);await f.advance(15000);await b.wait(s=>s.host===s.you);await b.action('next',{},400);await b.action('next',{discardLast:true});assert.equal(b.state.phase,'handoff');assert.equal(b.state.pendingLast,false);
+});
+
+test('Досрочное завершение отсутствующего хода не разрешает поздний зачёт',async t=>{
+ const f=await fixture(t),{a,b,code}=await prepare(f,{online:true});await a.action('begin');const card=a.state.card;a.disconnect();await b.wait(s=>!s.devices.find(d=>d.id===a.state.you).online);await f.advance(15000);await b.wait(s=>s.host===s.you);await b.action('recover');assert.equal(b.state.pendingLast,false);await a.join(code);assert.equal(a.state.lastCard.claimable,false);await a.action('awardLast',{card:card.id},400);
 });
 
 
