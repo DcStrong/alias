@@ -55,7 +55,7 @@ journalctl -u alias-certbot-renew.service -n 100 --no-pager
 ```sh
 npm run check
 npm test
-COPYFILE_DISABLE=1 tar --no-xattrs -czf /tmp/alias-release.tar.gz server.js game.js words.js package.json public
+COPYFILE_DISABLE=1 tar --no-xattrs -czf /tmp/alias-release.tar.gz server.js game.js words.js rotating.js package.json public
 scp /tmp/alias-release.tar.gz root@144.31.97.89:/tmp/alias-release.tar.gz
 ssh root@144.31.97.89
 ```

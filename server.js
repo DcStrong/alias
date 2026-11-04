@@ -13,7 +13,7 @@ export function createServer(options={}) {
    res.setHeader('X-Content-Type-Options','nosniff');res.setHeader('Referrer-Policy','no-referrer');
    res.setHeader('Content-Security-Policy',"default-src 'self'; style-src 'self'; script-src 'self'; connect-src 'self'; frame-ancestors 'none'");
    if(req.method==='GET'&&!url.pathname.startsWith('/api/')) {
-    const files={'/':'index.html','/app.js':'app.js','/guesser.js':'guesser.js','/style.css':'style.css'};const file=files[url.pathname];if(!file)return json(404,{error:'Не найдено'});
+    const files={'/':'index.html','/app.js':'app.js','/guesser.js':'guesser.js','/turns.js':'turns.js','/style.css':'style.css'};const file=files[url.pathname];if(!file)return json(404,{error:'Не найдено'});
     const data=await readFile(new URL(`./public/${file}`,import.meta.url));res.writeHead(200,{'Content-Type':file.endsWith('.html')?'text/html; charset=utf-8':file.endsWith('.js')?'text/javascript; charset=utf-8':'text/css; charset=utf-8','Cache-Control':'no-cache'});return res.end(data);
    }
    if(req.method==='POST') {
@@ -35,7 +35,7 @@ export function createServer(options={}) {
    if(match[2]==='events'&&req.method==='GET') {
     res.writeHead(200,{'Content-Type':'text/event-stream','Cache-Control':'no-cache, no-store','Connection':'keep-alive','X-Accel-Buffering':'no'});res.write(': connected\n\n');
     streams.set(res,{room,d});d.connections++;room.version++;room.touched=game.now();broadcast(room);
-    req.on('close',()=>{streams.delete(res);d.connections=Math.max(0,d.connections-1);if(!d.connections)d.disconnectedAt=game.now();room.touched=game.now();room.version++;broadcast(room);});return;
+    req.on('close',()=>{streams.delete(res);if(d.left)return;d.connections=Math.max(0,d.connections-1);if(!d.connections)d.disconnectedAt=game.now();room.touched=game.now();room.version++;broadcast(room);});return;
    }
    if(match[2]==='action'&&req.method==='POST') {if(game.tick(room))broadcast(room);game.action(room,d,body);broadcast(room);json(200,game.view(room,d));if(d.left)for(const [stream,s]of streams)if(s.d===d)stream.end();return;}
    return json(405,{error:'Метод не поддерживается'});

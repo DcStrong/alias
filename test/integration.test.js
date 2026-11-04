@@ -32,6 +32,32 @@ async function prepare(f,{mode='pair',rounds=1,penalty=0,online=false,difficulty
  await a.action('ready');await a.action('start');if(b)await b.wait(s=>s.phase==='handoff');return {a,b,code};
 }
 
+test('Сменные пары HTTP/SSE: роли, скрытая карточка, поздний зачёт и исправления ведущего',async t=>{
+ const f=await fixture(t),{a,b,code}=await prepare(f,{mode:'rotating',online:true,names:['Аня','Борис','Вера','Глеб'],penalty:1});
+ assert.equal(a.state.turnCount,12);assert.equal(a.state.settings.cycles,1);
+ const active=a.state.players.find(p=>p.id===a.state.active),receiver=a.state.guesser,owner=active.device===a.state.you?a:b,observer=owner===a?b:a;
+ await owner.action('begin');await observer.wait(s=>s.phase==='playing');
+ const secret=owner.state.card.word;assert.equal(observer.state.card,null);assertNoSecretValue(observer.state,secret);
+ await owner.action('card',{card:owner.state.card.id,result:'guess',winner:active.id});
+ await a.wait(s=>s.history.length===0&&s.scores[active.id]===1);await b.wait(s=>s.scores[receiver]===1);
+ const word=owner.state.lastCompleted.word;
+ await f.advance(60000);await owner.wait(s=>s.phase==='summary');const card=owner.state.lastCard.id;
+ await owner.action('awardLast',{card});await a.wait(s=>s.history.length===2);await b.wait(s=>s.history.length===2);
+ assert.equal(a.state.history[0].word,word);assert.equal(a.state.scores[receiver],2);
+ const entry=a.state.history[0].id;
+ await b.action('setAward',{entry,awarded:false},400);
+ await a.action('setAward',{entry,awarded:false});await b.wait(s=>s.history[0].awarded===false);assert.equal(b.state.scores[receiver],1);
+ await a.action('setAward',{entry,awarded:false});assert.equal(a.state.scores[receiver],1);
+ await a.action('setAward',{entry,awarded:true});await b.wait(s=>s.history[0].awarded);assert.equal(b.state.scores[receiver],2);
+ await a.join(code);assert.equal(a.state.history.length,2);assert.equal(a.state.lastCompleted.id,b.state.lastCompleted.id);await b.wait(s=>s.version===a.state.version);
+ const version=a.state.version;
+ const results=await Promise.all([a.post(`/api/rooms/${code}/action`,{type:'setAward',entry,awarded:false,version}),a.post(`/api/rooms/${code}/action`,{type:'next',version})]);
+ assert.deepEqual(results.map(r=>r.status).sort(),[200,400]);
+ await a.wait(s=>s.version>version);await b.wait(s=>s.version===a.state.version);
+ assert.equal(a.state.scores[receiver],a.state.phase==='summary'?1:2);
+ await a.action('endGame');assert.equal(a.state.phase,'lobby');assert.deepEqual(a.state.history,[]);assert.equal(a.state.guesser,undefined);
+});
+
 test('Локальная пара: передача, штраф, полные круги, итог и новая игра',async t=>{
  const f=await fixture(t),{a}=await prepare(f,{rounds:2,penalty:1});const words=new Set();
  assert.equal(a.state.players.length,2);assert.equal(a.state.devices.length,1);assert.equal(a.state.turnCount,4);

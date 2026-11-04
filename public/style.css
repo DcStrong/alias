@@ -39,3 +39,5 @@ select {
 }
 
 .team-roster{margin-bottom:22px}.team-order{display:flex;gap:6px;flex-shrink:0}.team-order button:disabled{cursor:default}
+.turn-roles{font-size:20px;margin:18px 0;overflow-wrap:anywhere}
+[hidden]{display:none!important}
