@@ -7,7 +7,7 @@
 - Ubuntu 22.04 LTS x86_64; ОС сохранена, переустановка не потребовалась.
 - Node.js 24.22.2 из официального дистрибутива, SHA256 проверен по официальному SHASUMS256.txt.
 - Один процесс Node.js: `alias.service`, системный пользователь `alias` без входа в shell, только `127.0.0.1:3000`.
-- Текущий код в `/opt/alias/releases/2b65f955ea791396effcd9f2464febe5820c30ff`, файл `REVISION` содержит этот SHA; `/opt/alias/current` указывает на активный релиз. Node: `/opt/alias/node/bin/node`.
+- Текущий код в `/opt/alias/releases/8a8d7dfe0210a234d24b0c49c9938d5d8b2ecd42`, файл `REVISION` содержит этот SHA; `/opt/alias/current` указывает на активный релиз. Node: `/opt/alias/node/bin/node`.
 - Nginx слушает 80/443, проксирует JSON и SSE без буферизации. Секретное состояние по-прежнему формирует сервер приложения.
 - `COOKIE_SECURE=true` включает Secure у HttpOnly cookie за HTTPS-прокси. При обычном локальном запуске без этой переменной HTTP продолжает работать.
 - systemd: запуск при загрузке, перезапуск через 4 секунды, лимит памяти 512 МБ, непривилегированный runtime, read-only файловая система сервиса.
