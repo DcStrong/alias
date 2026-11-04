@@ -26,3 +26,7 @@ Base: **f1b89e2a8cbc45e705e0678a2c7a38b16d842e12** (опубликованный
 2026-11-03: Standards review — 1 P2, Spec review — 0 findings; единственное замечание исправлено в `14469470d8996d33c42c8b85aa7ece6c30e2b19f` (`alias/review-fixes`). Исправление влито без конфликтов: merge `15ff74c324449a1f6a4968f5a84d19f5acfa61ae`. Production-код не менялся. Доказательства fresh fixer: полный suite **49/49**, `npm run check`, `node --check deploy/smoke.mjs` и `git diff --check` прошли; regression тест подтверждает допустимость подстрок метаданных и обнаружение настоящей утечки. Merger выполнил только `git diff --check`, без повторного suite. Подробнее: [review и исправление](iteration-13-18-review.md).
 
 Следующий шаг — coordinator убирает временные worktrees; ручная браузерная приёмка остаётся пользователю. Без push/deploy.
+
+## Закрытие и cleanup
+
+2026-11-04: сохранение checkpoint подтверждено commit `76865e6`. Все задачи 13–18 закрыты локально. Все семь implementer/fixer worktrees чистые и их HEAD входят в integration; удалены Git CLI без force, основной checkout и ветки сохранены. Финальный suite 49/49 относится к неизменившемуся коду; после него обновлялись только документы. [Общий отчёт и пользовательская приёмка](iteration-13-18-delivery.md). Никакого push/deploy или браузерной приёмки агентом. Предыдущие «следующий шаг» в истории выше выполнены.
