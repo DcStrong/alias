@@ -3,9 +3,10 @@ import {readFile} from 'node:fs/promises';
 import {realpathSync} from 'node:fs';
 import {fileURLToPath} from 'node:url';
 import {Game} from './game.js';
+import {authFromEnv} from './auth/config.js';
 import {SITE,page,headMarkup,footerMarkup,robots,sitemap,FAVICON} from './site.js';
 export function createServer(options={}) {
- const game=new Game(options), streams=new Map();
+ const game=new Game(options), streams=new Map(), auth=options.auth||null;
  const broadcast=r=>{ for(const [res,{room,d}] of streams) if(room===r&&!res.writableEnded&&!res.destroyed) res.write(`data: ${JSON.stringify(game.view(r,d))}\n\n`); };
  const server=http.createServer(async(req,res)=>{
   const json=(status,data)=>{res.writeHead(status,{'Content-Type':'application/json; charset=utf-8','Cache-Control':'no-store'});res.end(JSON.stringify(data));};
@@ -13,6 +14,12 @@ export function createServer(options={}) {
    const url=new URL(req.url,'http://localhost');
    res.setHeader('X-Content-Type-Options','nosniff');res.setHeader('Referrer-Policy','no-referrer');
    res.setHeader('Content-Security-Policy',"default-src 'self'; style-src 'self'; script-src 'self'; connect-src 'self'; frame-ancestors 'none'");
+   if(req.method==='POST') {
+    if(req.headers.origin&&req.headers.origin!==`http://${req.headers.host}`&&req.headers.origin!==`https://${req.headers.host}`)return json(403,{error:'Недопустимый источник запроса'});
+    if(!req.headers['content-type']?.startsWith('application/json'))return json(415,{error:'Нужен JSON'});
+   }
+   if(auth){let handled;try{handled=await auth.handle(req,res,url);}catch(error){console.error('auth',error);if(!res.headersSent)json(500,{error:'Ошибка сервера. Попробуйте позже'});return;}if(handled)return;}
+   else if(url.pathname==='/api/me')return json(200,{account:null,providers:{discord:false,telegram:false}});
    if(req.method==='GET'&&!url.pathname.startsWith('/api/')) {
     const origin=`${req.headers['x-forwarded-proto']==='https'||req.socket.encrypted?'https':'http'}://${String(req.headers.host||'localhost').replace(/[^\w.:-]/g,'')}`;
     const text=(type,body)=>{res.writeHead(200,{'Content-Type':type,'Cache-Control':'no-cache'});return res.end(body);};
@@ -20,13 +27,9 @@ export function createServer(options={}) {
     if(url.pathname==='/robots.txt')return text('text/plain; charset=utf-8',robots(origin));
     if(url.pathname==='/sitemap.xml')return text('application/xml; charset=utf-8',sitemap(origin));
     if(url.pathname==='/favicon.svg')return text('image/svg+xml',FAVICON);
-    const files={'/':'index.html','/app.js':'app.js','/guesser.js':'guesser.js','/turns.js':'turns.js','/style.css':'style.css'};const file=files[url.pathname];if(!file)return json(404,{error:'Не найдено'});
+    const files={'/':'index.html','/app.js':'app.js','/guesser.js':'guesser.js','/turns.js':'turns.js','/style.css':'style.css','/login.js':'login.js'};const file=files[url.pathname];if(!file)return json(404,{error:'Не найдено'});
     let data=await readFile(new URL(`./public/${file}`,import.meta.url));
     if(file==='index.html')data=data.toString().replace('<!--head-->',headMarkup({title:`${SITE.name} — игра в слова для друзей онлайн`})).replace('<!--footer-->',footerMarkup());res.writeHead(200,{'Content-Type':file.endsWith('.html')?'text/html; charset=utf-8':file.endsWith('.js')?'text/javascript; charset=utf-8':'text/css; charset=utf-8','Cache-Control':'no-cache'});return res.end(data);
-   }
-   if(req.method==='POST') {
-    if(req.headers.origin&&req.headers.origin!==`http://${req.headers.host}`&&req.headers.origin!==`https://${req.headers.host}`)return json(403,{error:'Недопустимый источник запроса'});
-    if(!req.headers['content-type']?.startsWith('application/json'))return json(415,{error:'Нужен JSON'});
    }
    let body={};if(req.method==='POST'){let raw='';for await(const chunk of req){raw+=chunk;if(raw.length>8192){json(413,{error:'Запрос слишком большой'});return;}}body=JSON.parse(raw||'{}');}
    if(url.pathname==='/api/rooms'&&req.method==='POST') {
@@ -45,7 +48,7 @@ export function createServer(options={}) {
     streams.set(res,{room,d});d.connections++;room.version++;room.touched=game.now();broadcast(room);
     req.on('close',()=>{streams.delete(res);if(d.left)return;d.connections=Math.max(0,d.connections-1);if(!d.connections)d.disconnectedAt=game.now();room.touched=game.now();room.version++;broadcast(room);});return;
    }
-   if(match[2]==='action'&&req.method==='POST') {if(game.tick(room))broadcast(room);game.action(room,d,body);broadcast(room);json(200,game.view(room,d));if(d.left)for(const [stream,s]of streams)if(s.d===d)stream.end();return;}
+   if(match[2]==='action'&&req.method==='POST') {if(game.tick(room))broadcast(room);let account=null;if(body.asAccount===true&&auth){try{account=await auth.account(req,res);}catch(error){console.error('auth',error);return json(500,{error:'Ошибка сервера. Попробуйте позже'});}}game.action(room,d,body,{account:account&&auth.publicView(account)});broadcast(room);json(200,game.view(room,d));if(d.left)for(const [stream,s]of streams)if(s.d===d)stream.end();return;}
    return json(405,{error:'Метод не поддерживается'});
   }catch(error){json(400,{error:error instanceof SyntaxError?'Некорректный JSON':error.message});}
  });
@@ -54,5 +57,5 @@ export function createServer(options={}) {
  return {server,game};
 }
 if(process.argv[1]&&realpathSync(process.argv[1])===fileURLToPath(import.meta.url)) {
- const port=Number(process.env.PORT||3000);const {server}=createServer();server.listen(port,process.env.HOST||'0.0.0.0',()=>console.log(`Alias: http://localhost:${server.address().port} (HOST=${process.env.HOST||'0.0.0.0'})`));
+ const port=Number(process.env.PORT||3000);const auth=await authFromEnv(process.env);const {server}=createServer({auth});server.listen(port,process.env.HOST||'0.0.0.0',()=>console.log(`Alias: http://localhost:${server.address().port} (HOST=${process.env.HOST||'0.0.0.0'})`));
 }

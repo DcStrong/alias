@@ -31,7 +31,7 @@ export class Game {
   view(room,d) {
     const active=this.active(room);
     return {code:room.code,version:room.version,phase:room.phase,host:room.host,you:d.id,settings:room.settings,difficulties:DIFFICULTIES,
-      players:room.players.map(p=>({...p,online:this.connected(room,p)})), devices:room.devices.filter(x=>!x.left).map(x=>({id:x.id,ready:x.ready,online:x.connections>0})),
+      players:room.players.map(({account,...p})=>({...p,linked:!!account,online:this.connected(room,p)})), devices:room.devices.filter(x=>!x.left).map(x=>({id:x.id,ready:x.ready,online:x.connections>0})),
       turnOrder:this.turnOrder(room),active:active?.id,guesser:this.guesser(room)?.id,turn:room.turn,turnCount:room.schedule?.length,round:room.schedule?Math.min(room.settings.mode==='rotating'?room.settings.cycles:room.settings.rounds,Math.floor(room.turn/(room.settings.mode==='rotating'?room.rosterSize*(room.rosterSize-1):room.rosterSize))+1):0,
       deadline:room.deadline,paused:!!room.paused,pausedRemaining:room.paused?room.pausedRemaining:null,serverNow:this.now(),card:room.phase==='playing' && !room.paused && active?.device===d.id?{id:room.cardId,word:room.word,hint:this.hint(room,room.word)}:null,
       lastCompleted:['playing','summary','finished'].includes(room.phase)?room.lastCompleted??null:null,
@@ -87,16 +87,18 @@ export class Game {
     }
     if(changed) {room.version++;room.touched=this.now();} return changed;
   }
-  action(room,d,a) {
+  action(room,d,a,ctx={}) {
     this.tick(room);
     if(a.version!==room.version) fail('Состояние уже изменилось. Повторите действие');
     const lobby = () => {if(room.phase!=='lobby') fail('Изменения доступны только до партии');};
     switch(a.type) {
       case 'addPlayer': {
-        lobby(); const name=String(a.name||'').trim().slice(0,24);if(!name) fail('Введите имя');
+        lobby(); const account=a.asAccount===true?ctx.account:null;if(a.asAccount===true&&!account) fail('Войдите в аккаунт заново');
+        const name=String(a.name||account?.displayName||'').trim().slice(0,24);if(!name) fail('Введите имя');
+        if(account&&room.players.some(p=>p.account===account.id)) fail('Этот аккаунт уже в комнате');
         if(room.players.length>=16) fail('Максимум 16 игроков');
         if(room.players.some(p=>p.name.toLowerCase()===name.toLowerCase())) fail('Такое имя уже занято');
-        room.players.push({id:randomUUID(),name,device:d.id,team:a.team==='B'?'B':'A',left:false});this.resetReady(room);break;
+        room.players.push({id:randomUUID(),name,device:d.id,team:a.team==='B'?'B':'A',left:false,...(account?{account:account.id,username:account.username||null,avatar:account.avatar||null}:{})});this.resetReady(room);break;
       }
       case 'removePlayer': {lobby(); const p=room.players.find(p=>p.id===a.player); if(!p) fail('Игрок не найден');if(p.device!==d.id) this.host(room,d); room.players=room.players.filter(x=>x!==p);this.resetReady(room);break;}
       case 'team': {lobby();const p=room.players.find(p=>p.id===a.player);if(!p) fail('Игрок не найден');if(p.device!==d.id)this.host(room,d);p.team=a.team==='B'?'B':'A';this.resetReady(room);break;}

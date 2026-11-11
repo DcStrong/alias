@@ -13,6 +13,8 @@ Environment=NODE_ENV=production
 Environment=HOST=127.0.0.1
 Environment=PORT=3000
 Environment=COOKIE_SECURE=true
+# Секреты входа и DATABASE_URL: AUTH_SECRET, PUBLIC_ORIGIN, DISCORD_*, TELEGRAM_*. Файл root:alias, права 640.
+EnvironmentFile=-/etc/alias/env
 Restart=always
 RestartSec=4
 TimeoutStopSec=15

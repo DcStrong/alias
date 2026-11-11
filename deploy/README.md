@@ -93,3 +93,29 @@ node deploy/smoke.mjs https://144.31.97.89
 ## Ограничения
 
 Один процесс, комнаты в памяти. Нет общей БД, мониторинга доступности/уведомлений, автоматического масштабирования или сохранения партий. Ссылка/код — приглашение без аккаунтов. Пароль SSH не хранится в репозитории и для обновления вводится обычным SSH-клиентом пользователя.
+
+## Вход через Discord и Telegram (задачи 28–31)
+
+Без `AUTH_SECRET` сервер работает как раньше: только гостевая игра. Включение на новом сервере:
+
+1. PostgreSQL 16+, слушает только `127.0.0.1`, `password_encryption = scram-sha-256`, порт 5432 закрыт файрволом.
+2. Роли: `sudo -u postgres psql -v app_password='…' -v migrator_password='…' -f deploy/postgres-roles.sql`.
+3. В каталоге релиза: `npm ci --omit=dev`, затем `MIGRATE_DATABASE_URL=postgres://alias_migrator:…@127.0.0.1/alias npm run migrate`.
+4. `/etc/alias/env` (владелец `root:alias`, права `640`):
+
+```
+AUTH_SECRET=<openssl rand -base64 48>
+DATABASE_URL=postgres://alias_app:…@127.0.0.1/alias
+PUBLIC_ORIGIN=https://<домен>
+DISCORD_CLIENT_ID=…
+DISCORD_CLIENT_SECRET=…
+TELEGRAM_BOT_TOKEN=…
+TELEGRAM_BOT_NAME=<имя бота без @>
+```
+
+`AUTH_SECRET` не менять после запуска: от него зависят ключи аккаунтов (смена = все войдут как новые пользователи).
+
+5. Discord Developer Portal → OAuth2 → Redirects: `https://<домен>/auth/discord/callback`. Scope только `identify`.
+6. @BotFather → `/setdomain` → `<домен>`.
+7. Резервные копии: `pg_dump -Fc alias | age -r <ключ> > alias-$(date +%F).dump.age`, хранить 14 дней, ключ расшифровки — не на сервере.
+8. Nginx: ограничение `limit_req` на `location /auth/` (дополнительно к ограничению в приложении).
