@@ -41,3 +41,7 @@ select {
 .team-roster{margin-bottom:22px}.team-order{display:flex;gap:6px;flex-shrink:0}.team-order button:disabled{cursor:default}
 .turn-roles{font-size:20px;margin:18px 0;overflow-wrap:anywhere}
 [hidden]{display:none!important}
+.check{display:flex;flex-wrap:wrap;align-items:center;gap:10px;font-size:14px;color:#edf0ff;cursor:pointer}.check[hidden]{display:none}.check input{width:18px;height:18px;padding:0;accent-color:#b5ee7b}.check .subtle{flex-basis:100%;font-size:12px}
+.hint{display:block;font-size:13px;font-weight:400;color:#a0abc3;margin-top:4px;line-height:1.5}.wordcard .hint{font-size:16px;color:#3d4738;max-width:520px;margin:18px auto 0}
+footer{border-top:1px solid #ffffff12;padding-top:24px}footer p{margin:8px 0}.footer-links{display:flex;flex-wrap:wrap;gap:10px 22px;margin-bottom:12px}.footer-links a{color:#bdc6d9;text-decoration:none;font-size:13px}.footer-links a:hover{color:#b5ee7b;text-decoration:underline}
+a#connection{text-decoration:none;font-weight:700}.page{max-width:820px}.prose h1{font-size:36px;margin-top:0}.prose h2{font-size:20px;margin:28px 0 10px}.prose li{line-height:1.65;color:#aeb8cf;margin:6px 0}.prose strong{color:#edf0ff}.prose code{background:#111727;padding:2px 6px;border-radius:6px}

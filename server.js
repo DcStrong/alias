@@ -3,6 +3,7 @@ import {readFile} from 'node:fs/promises';
 import {realpathSync} from 'node:fs';
 import {fileURLToPath} from 'node:url';
 import {Game} from './game.js';
+import {SITE,page,headMarkup,footerMarkup,robots,sitemap,FAVICON} from './site.js';
 export function createServer(options={}) {
  const game=new Game(options), streams=new Map();
  const broadcast=r=>{ for(const [res,{room,d}] of streams) if(room===r&&!res.writableEnded&&!res.destroyed) res.write(`data: ${JSON.stringify(game.view(r,d))}\n\n`); };
@@ -13,8 +14,15 @@ export function createServer(options={}) {
    res.setHeader('X-Content-Type-Options','nosniff');res.setHeader('Referrer-Policy','no-referrer');
    res.setHeader('Content-Security-Policy',"default-src 'self'; style-src 'self'; script-src 'self'; connect-src 'self'; frame-ancestors 'none'");
    if(req.method==='GET'&&!url.pathname.startsWith('/api/')) {
+    const origin=`${req.headers['x-forwarded-proto']==='https'||req.socket.encrypted?'https':'http'}://${String(req.headers.host||'localhost').replace(/[^\w.:-]/g,'')}`;
+    const text=(type,body)=>{res.writeHead(200,{'Content-Type':type,'Cache-Control':'no-cache'});return res.end(body);};
+    const html=page(url.pathname);if(html)return text('text/html; charset=utf-8',html);
+    if(url.pathname==='/robots.txt')return text('text/plain; charset=utf-8',robots(origin));
+    if(url.pathname==='/sitemap.xml')return text('application/xml; charset=utf-8',sitemap(origin));
+    if(url.pathname==='/favicon.svg')return text('image/svg+xml',FAVICON);
     const files={'/':'index.html','/app.js':'app.js','/guesser.js':'guesser.js','/turns.js':'turns.js','/style.css':'style.css'};const file=files[url.pathname];if(!file)return json(404,{error:'Не найдено'});
-    const data=await readFile(new URL(`./public/${file}`,import.meta.url));res.writeHead(200,{'Content-Type':file.endsWith('.html')?'text/html; charset=utf-8':file.endsWith('.js')?'text/javascript; charset=utf-8':'text/css; charset=utf-8','Cache-Control':'no-cache'});return res.end(data);
+    let data=await readFile(new URL(`./public/${file}`,import.meta.url));
+    if(file==='index.html')data=data.toString().replace('<!--head-->',headMarkup({title:`${SITE.name} — игра в слова для друзей онлайн`})).replace('<!--footer-->',footerMarkup());res.writeHead(200,{'Content-Type':file.endsWith('.html')?'text/html; charset=utf-8':file.endsWith('.js')?'text/javascript; charset=utf-8':'text/css; charset=utf-8','Cache-Control':'no-cache'});return res.end(data);
    }
    if(req.method==='POST') {
     if(req.headers.origin&&req.headers.origin!==`http://${req.headers.host}`&&req.headers.origin!==`https://${req.headers.host}`)return json(403,{error:'Недопустимый источник запроса'});

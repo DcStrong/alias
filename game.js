@@ -1,5 +1,6 @@
 import { randomBytes, randomInt, randomUUID } from 'node:crypto';
 import { WORD_SETS, DIFFICULTIES } from './words.js';
+import { HARD_HINTS } from './hints.js';
 import { createRotatingSchedule } from './rotating.js';
 const fail = (message) => { throw new Error(message); };
 export class Game {
@@ -7,7 +8,7 @@ export class Game {
   device(room, token) { return room.devices.find(d => d.token === token && !d.left) || fail('Войдите в комнату заново'); }
   create() {
     let code; do { code = randomBytes(4).toString('hex').slice(0,6).toUpperCase(); } while(this.rooms.has(code));
-    const room = {code, devices:[], players:[], host:null, phase:'lobby', settings:{mode:'pair',difficulty:'basic',seconds:60,rounds:3,cycles:1,penalty:0}, version:0, touched:this.now(), history:[]};
+    const room = {code, devices:[], players:[], host:null, phase:'lobby', settings:{mode:'pair',difficulty:'basic',seconds:60,rounds:3,cycles:1,penalty:0,hints:false}, version:0, touched:this.now(), history:[]};
     this.rooms.set(code, room); return room;
   }
   join(room, token) {
@@ -22,6 +23,7 @@ export class Game {
     const a=room.players.filter(p=>p.team==='A'),b=room.players.filter(p=>p.team==='B');
     return Array.from({length:Math.max(a.length,b.length)},(_,i)=>[a[i]?.id,b[i]?.id]).flat().filter(Boolean);
   }
+  hint(room,word) { return room.settings.hints&&room.settings.difficulty==='hard'?HARD_HINTS[word]:undefined; }
   active(room) { return room.players.find(p=>p.id===room.schedule?.[room.turn]?.explainer); }
   guesser(room) { return room.players.find(p=>p.id===room.schedule?.[room.turn]?.guesser); }
   playable(room,turn) { return [turn.explainer,turn.guesser].filter(Boolean).every(id=>room.players.some(p=>p.id===id&&!p.left)); }
@@ -31,15 +33,15 @@ export class Game {
     return {code:room.code,version:room.version,phase:room.phase,host:room.host,you:d.id,settings:room.settings,difficulties:DIFFICULTIES,
       players:room.players.map(p=>({...p,online:this.connected(room,p)})), devices:room.devices.filter(x=>!x.left).map(x=>({id:x.id,ready:x.ready,online:x.connections>0})),
       turnOrder:this.turnOrder(room),active:active?.id,guesser:this.guesser(room)?.id,turn:room.turn,turnCount:room.schedule?.length,round:room.schedule?Math.min(room.settings.mode==='rotating'?room.settings.cycles:room.settings.rounds,Math.floor(room.turn/(room.settings.mode==='rotating'?room.rosterSize*(room.rosterSize-1):room.rosterSize))+1):0,
-      deadline:room.deadline,serverNow:this.now(),card:room.phase==='playing' && active?.device===d.id?{id:room.cardId,word:room.word}:null,
+      deadline:room.deadline,paused:!!room.paused,pausedRemaining:room.paused?room.pausedRemaining:null,serverNow:this.now(),card:room.phase==='playing' && !room.paused && active?.device===d.id?{id:room.cardId,word:room.word,hint:this.hint(room,room.word)}:null,
       lastCompleted:['playing','summary','finished'].includes(room.phase)?room.lastCompleted??null:null,
-      lastCard:['summary','finished'].includes(room.phase)&&room.lastCard?.device===d.id?{id:room.lastCard.id,word:room.lastCard.word,result:room.lastCard.result,awarded:room.history.find(h=>h.id===room.lastCard.id)?.awarded,claimable:room.lastCard.claimable,explainer:room.lastCard.explainer}:null,
+      lastCard:['summary','finished'].includes(room.phase)&&room.lastCard?.device===d.id?{id:room.lastCard.id,word:room.lastCard.word,hint:this.hint(room,room.lastCard.word),result:room.lastCard.result,awarded:room.history.find(h=>h.id===room.lastCard.id)?.awarded,claimable:room.lastCard.claimable,explainer:room.lastCard.explainer}:null,
       pendingLast:!!room.lastCard?.claimable, history:room.phase==='playing'?[]:room.history, scores:room.scores || {}, reason:room.reason || null};
   }
   resetReady(room) { room.devices.forEach(d=>d.ready=false); }
   resetGame(room) {
     room.players=room.players.filter(p=>!p.left);
-    room.phase='lobby';room.history=[];room.lastCard=null;room.lastCompleted=null;room.scores={};room.deck=null;room.schedule=null;room.rosterSize=null;room.turn=null;room.reason=null;room.deadline=null;room.word=null;room.cardId=null;this.resetReady(room);
+    room.phase='lobby';room.history=[];room.lastCard=null;room.lastCompleted=null;room.scores={};room.deck=null;room.schedule=null;room.rosterSize=null;room.turn=null;room.reason=null;room.deadline=null;room.paused=false;room.pausedRemaining=null;room.word=null;room.cardId=null;this.resetReady(room);
   }
   nextCard(room) {
     if(!room.deck.length) { this.endTurn(room,'Словарь закончился'); room.phase='finished'; return; }
@@ -51,14 +53,14 @@ export class Game {
       const p=this.active(room),result=last?.word===room.word?last.result:'unplayed';
       room.lastCard={id:room.cardId,word:room.word,device:p?.device,explainer:p?.id,guesser:this.guesser(room)?.id,team:p?.team,result,claimable:reason==='Время вышло'&&result==='unplayed'};
     }
-    room.phase='summary';room.word=null;room.cardId=null;room.deadline=null;room.reason=reason;
+    room.phase='summary';room.word=null;room.cardId=null;room.deadline=null;room.paused=false;room.pausedRemaining=null;room.reason=reason;
   }
   score(room, key, delta) {room.scores[key]=(room.scores[key]||0)+delta;}
   complete(room,{id,word,result,explainer,team,winner}) {
     const delta=result==='guess'?1:-room.settings.penalty;
     const awards=room.settings.mode==='pair'?[{player:'pair',delta}]:room.settings.mode==='teams'?[{player:team,delta}]:[{player:explainer,delta},...(winner?[{player:winner.id,delta:1}]:[])];
     awards.forEach(a=>this.score(room,a.player,a.delta));
-    const entry={id,turn:room.turn,word,result,winner:winner?.name,delta,awarded:result==='guess',awards};
+    const entry={id,turn:room.turn,word,hint:this.hint(room,word),result,winner:winner?.name,delta,awarded:result==='guess',awards};
     room.history.push(entry);
     if(result==='guess'||result==='skip')room.lastCompleted=entry;
   }
@@ -77,7 +79,7 @@ export class Game {
   }
   tick(room) {
     let changed=false;
-    if(room.phase==='playing'&&this.now()>=room.deadline) {this.endTurn(room);changed=true;}
+    if(room.phase==='playing'&&!room.paused&&this.now()>=room.deadline) {this.endTurn(room);changed=true;}
     const host=room.devices.find(d=>d.id===room.host);
     if(host && !host.connections && this.now()-host.disconnectedAt>=this.graceMs) {
       const replacement=room.devices.find(d=>!d.left&&d.connections>0);
@@ -109,10 +111,11 @@ export class Game {
       }
       case 'settings': {
         lobby();this.host(room,d);const {mode,seconds,rounds,penalty}=a;
+        const hints=a.hints===undefined?room.settings.hints:a.hints;
         const difficulty=a.difficulty===undefined?room.settings.difficulty:a.difficulty;
         const cycles=a.cycles===undefined?room.settings.cycles:a.cycles;
-        if(!['basic','medium','hard'].includes(difficulty)||!['pair','ffa','teams','rotating'].includes(mode)||![30,60,90,120].includes(seconds)||!Number.isInteger(rounds)||rounds<1||rounds>10||!Number.isInteger(cycles)||cycles<1||cycles>10||![0,1].includes(penalty)) fail('Некорректные настройки');
-        room.settings={mode,difficulty,seconds,rounds,cycles,penalty};this.resetReady(room);break;
+        if(!['basic','medium','hard'].includes(difficulty)||!['pair','ffa','teams','rotating'].includes(mode)||![30,60,90,120].includes(seconds)||!Number.isInteger(rounds)||rounds<1||rounds>10||!Number.isInteger(cycles)||cycles<1||cycles>10||![0,1].includes(penalty)||typeof hints!=='boolean') fail('Некорректные настройки');
+        room.settings={mode,difficulty,seconds,rounds,cycles,penalty,hints:difficulty==='hard'&&hints};this.resetReady(room);break;
       }
       case 'ready': lobby();d.ready=!d.ready;break;
       case 'start': {
@@ -131,6 +134,7 @@ export class Game {
       case 'card': {
         const p=this.active(room);
         if(room.phase!=='playing'||p?.device!==d.id) fail('Карточкой управляет объясняющий');
+        if(room.paused) fail('Ход на паузе. Сначала продолжите');
         if(a.card!==room.cardId) fail('Карточка уже обработана');
         if(!['guess','skip','violation'].includes(a.result)) fail('Неизвестный результат');
         let winner;
@@ -138,6 +142,13 @@ export class Game {
         if(a.result==='guess'&&room.settings.mode==='rotating')winner=this.guesser(room);
         this.complete(room,{id:room.cardId,word:room.word,result:a.result,explainer:p.id,team:p.team,winner});
         this.nextCard(room);break;
+      }
+      case 'pause': case 'resume': {
+        if(room.phase!=='playing') fail('Пауза доступна только во время хода');
+        if(this.active(room)?.device!==d.id&&room.host!==d.id) fail('Паузу ставят объясняющий или ведущий');
+        if(a.type==='pause') {if(room.paused) fail('Ход уже на паузе');room.pausedRemaining=Math.max(0,room.deadline-this.now());room.deadline=null;room.paused=true;}
+        else {if(!room.paused) fail('Ход не на паузе');room.deadline=this.now()+room.pausedRemaining;room.paused=false;room.pausedRemaining=null;}
+        break;
       }
       case 'awardLast': {
         const card=room.lastCard;

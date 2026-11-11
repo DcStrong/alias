@@ -5,7 +5,7 @@ import {WORDS,HARD_WORDS,MEDIUM_WORDS} from '../words.js';
 const normalize=word=>word.toLowerCase().replaceAll('ё','е').replace(/\s+/g,' ').trim();
 
 test('Редакционный контракт наборов: объём, словосочетания, чистота и отсутствие дублей',()=>{
- assert.equal(WORDS.length,661,'Базовый набор сохранён целиком');assert.ok(HARD_WORDS.length>=400);
+ assert.equal(WORDS.length,811,'Базовый набор расширен до 811 карточек');assert.equal(HARD_WORDS.length,666);assert.equal(MEDIUM_WORDS.length,539);
  assert.ok(HARD_WORDS.filter(w=>w.includes(' ')).length>=150);
  for(const entries of [WORDS,HARD_WORDS]){
   assert.equal(new Set(entries.map(normalize)).size,entries.length,'Дубль с учётом регистра, ё/е и пробелов');
@@ -17,8 +17,8 @@ test('Редакционный контракт наборов: объём, сл
 
 
 test('Средний набор самостоятелен, содержит практичные выражения и сохраняет прежние колоды',()=>{
- assert.equal(createHash('sha256').update(JSON.stringify(WORDS)).digest('hex'),'5b1345a7a156ab275467c282173c3e1d8029b1027872562d8499c1a1ddbc1f6a');
- assert.equal(createHash('sha256').update(JSON.stringify(HARD_WORDS)).digest('hex'),'e348e1b163d3cd0bb792f4fc10bb535e519e8ec89bb8522550aa8bb6852ba82d');
+ assert.equal(createHash('sha256').update(JSON.stringify(WORDS)).digest('hex'),'ff33090e8130b65b34e7c3ee6a806a2ad0d336df368368b832c7f6af6ec7d666');
+ assert.equal(createHash('sha256').update(JSON.stringify(HARD_WORDS)).digest('hex'),'b92472a3399374fc16cc0eea0b1fba6ce0b0bb40d94f249121924fd81104b7ab');
  assert.ok(MEDIUM_WORDS.length>=300);
  assert.ok(MEDIUM_WORDS.filter(w=>w.includes(' ')).length>=100);
  const existing=new Set([...WORDS,...HARD_WORDS].map(normalize));
